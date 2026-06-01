@@ -1,0 +1,18 @@
+CAPSTONE PROJECT:
+BLOCKCHAIN & APPLICATIONS (IT4527E)
+Objective: Apply knowledge of Smart Contracts, Blockchain data structures, and 
+DeFi/Identity protocols to build functional, real-world decentralized applications.
+
+Decentralized Academic Credential System with Selective Disclosure
+● Objective: Develop a system for issuing and verifying digital diplomas. A student 
+(Holder) can prove they graduated in a specific field without revealing their entire 
+transcript or unnecessary personal data.
+● Technical Requirements:
+○ Cryptography: Use Elliptic Curve Cryptography (ECC) to sign credentials issued 
+by the university.
+○ Selective Disclosure: Implement a Merkle Tree structure. Each course/grade is a 
+leaf node. The student provides Merkle Proofs only for specific requested courses 
+without revealing the rest of the transcript.
+○ On-chain Registry: Deploy a smart contract to maintain a registry of authorized 
+issuers (universities) and a Revocation List for invalid credentials.
+

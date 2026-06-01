@@ -1,0 +1,46 @@
+{
+  "name": "academic-credentials-app",
+  "version": "0.1.0",
+  "description": "Off-chain CLI tools (Issuer, Holder, Verifier) for the decentralized academic credential system.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "issuer": "dist/issuer/cli.js",
+    "holder": "dist/holder/cli.js",
+    "verifier": "dist/verifier/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "issuer": "tsx src/issuer/cli.ts",
+    "holder": "tsx src/holder/cli.ts",
+    "verifier": "tsx src/verifier/cli.ts",
+    "demo": "tsx src/demo/end-to-end.ts",
+    "demo:full": "tsx src/demo/with-anvil.ts",
+    "web": "vite --host 0.0.0.0",
+    "web:build": "vite build",
+    "web:preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "node:start": "anvil --silent &",
+    "deploy:local": "tsx src/scripts/deploy-local.ts"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.6.0",
+    "@noble/hashes": "^1.5.0",
+    "commander": "^12.1.0",
+    "ethers": "^6.13.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7"
+  },
+  "overrides": {
+    "ws": "^8.21.0"
+  }
+}

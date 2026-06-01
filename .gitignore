@@ -1,0 +1,25 @@
+# node
+node_modules/
+*.log
+.DS_Store
+
+# foundry
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+contracts/lib/
+
+# build outputs
+app/dist/
+app/dist-web/
+
+# local secrets and runtime artifacts
+app/keys/
+app/data/
+.env
+.env.*
+!.env.example
+
+# editor
+.vscode/
+.idea/
