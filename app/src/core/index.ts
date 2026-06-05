@@ -5,3 +5,4 @@ export * from "./hash.js";
 export * from "./merkle.js";
 export * from "./ecc.js";
 export * from "./credential.js";
+export * as v2 from "./v2/index.js";
