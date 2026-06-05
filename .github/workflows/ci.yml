@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.19.1
+        cache: 'npm'
+        cache-dependency-path: app/package-lock.json
+
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+      with:
+        version: v1.7.1
+
+    - name: Set up project
+      run: make setup
+
+    - name: Run checks
+      run: make check
+
+    - name: Run packaging smoke check
+      run: make smoke-check

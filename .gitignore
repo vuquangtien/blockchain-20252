@@ -7,7 +7,10 @@ node_modules/
 contracts/cache/
 contracts/out/
 contracts/broadcast/
-contracts/lib/
+
+# generated package and smoke-test workspace
+/*.zip
+/tmp-smoke-check/
 
 # build outputs
 app/dist/

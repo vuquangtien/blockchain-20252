@@ -106,28 +106,26 @@ The system has three actors:
 ## Quick start (5 minutes)
 
 ```bash
-# 1. Build smart contracts and run their tests
-cd contracts
-forge install                # one-time, after cloning
-forge test                   # 23 tests pass
+# 1. Run the setup automation (initializes pinned git submodules and installs npm packages)
+make setup
 
-# 2. Build off-chain app and run its unit tests
-cd ../app
-npm install
-npm run test                 # 26 tests pass
-npm run build                # TypeScript CLI build
-npm run web:build            # production browser DApp build
+# 2. Run deterministic validation (Solidity formatting, smart-contract tests, vitest unit tests, and builds)
+make check
 
-# 3. Run the full end-to-end demo (auto-starts and stops Anvil for you)
+# 3. (Optional) Run npm audit independently (requires network access)
+make audit
+
+# 4. Run the full end-to-end demo (auto-starts and stops Anvil for you)
+cd app
 npm run demo:full            # deploys, issues, presents, verifies, revokes — all green
 # or, if you want to keep your own anvil running:
 anvil &                      # http://127.0.0.1:8545
 npm run demo
 
-# 4. Or play with the CLIs by hand:
+# 5. Or play with the CLIs by hand:
 #    See docs/USAGE.md for a complete walkthrough.
 
-# 5. Launch the browser dashboard:
+# 6. Launch the browser dashboard:
 npm run web
 # open http://localhost:5173
 ```
@@ -135,10 +133,12 @@ npm run web
 Or from the project root:
 
 ```bash
-make check      # contracts + app tests, CLI build, browser build, npm audit
-make demo       # full local Anvil demo
-make web        # browser dashboard
-make package    # creates a clean submission zip without node_modules/build outputs
+make check       # Solidity formatting, tests, vitest unit tests, CLI + Web builds
+make audit       # npm audit (network-dependent)
+make demo        # full local Anvil demo
+make web         # browser dashboard
+make package     # creates a clean submission zip (includes pinned/vendored Solidity dependencies; npm ci requires registry access or populated npm cache)
+make smoke-check # packages the zip, extracts it to a temp dir, runs setup + check to verify reproducibility
 ```
 
 The end-to-end demo walks through every requirement in the brief in 9 sections. Sample output is shown in [docs/USAGE.md](docs/USAGE.md#end-to-end-demo).

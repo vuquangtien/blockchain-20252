@@ -3,21 +3,25 @@
 Run this before sending the project to your teacher.
 
 ```bash
+make setup
 make check
+make smoke-check
 make demo
-make package
 ```
 
 Expected results:
 
+- `make setup` completes successfully, initializing dependencies.
+- `make check` succeeds deterministically without requiring network access.
+- `make smoke-check` successfully packages, extracts, and runs setup/checks from the clean package.
 - Foundry format check passes.
 - 23 smart-contract tests pass.
 - 26 TypeScript tests pass.
 - CLI TypeScript build passes.
 - Vite browser build passes.
-- `npm audit` reports 0 vulnerabilities.
+- `make audit` (run independently) reports 0 vulnerabilities.
 - End-to-end Anvil demo finishes with `Demo completed successfully`.
-- `20235625-VuQuangTien-blockchain-credential.zip` is created without `node_modules`, Foundry build outputs, local keys, or runtime data.
+- `20235625-VuQuangTien-blockchain-credential.zip` is created, containing the project files and pinned/vendored Solidity dependencies under `contracts/lib/` (with no nested `.git` metadata). Restoring Node packages requires network access to the npm registry or a populated npm cache when running `npm ci`.
 
 Files to read before the defense:
 
