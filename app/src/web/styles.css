@@ -18,6 +18,9 @@
     --danger-soft: #f8ddd9;
     --shadow: 0 22px 60px rgb(23 34 40 / 10%);
     --hero-shadow: 0 36px 90px rgb(23 34 40 / 16%);
+    --space-section: 32px;
+    --space-block: 22px;
+    --space-row: 14px;
     font-family:
         "IBM Plex Sans",
         "Avenir Next",
@@ -70,7 +73,7 @@ pre {
 
 .page-shell {
     display: grid;
-    gap: 18px;
+    gap: var(--space-section);
 }
 
 .hero {
@@ -138,9 +141,10 @@ pre {
 }
 
 .hero h1 {
-    max-width: 12ch;
+    max-width: 14ch;
     margin-top: 10px;
-    font-size: clamp(2.9rem, 7vw, 5.4rem);
+    font-size: clamp(2.4rem, 5.5vw, 4.2rem);
+    line-height: 1.02;
 }
 
 .hero-text {
@@ -246,7 +250,6 @@ pre {
 .proof-shell,
 .binding-panel,
 .verification-panel,
-.chain-stage,
 .boundary-card {
     border: 1px solid var(--line);
     border-radius: 22px;
@@ -311,13 +314,15 @@ pre {
 
 .notice,
 .status-line,
-.workflow-band article,
+.story-band article,
 .comparison-panel,
 .policy-callout,
 .empty-state,
 .check-row,
+.category-row,
 .proof-step,
 .claim-toggle,
+.status-card,
 .registry-grid article {
     border: 1px solid var(--line);
     border-radius: 18px;
@@ -368,30 +373,32 @@ pre {
     }
 }
 
-.workflow-band {
+.story-band {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-row);
 }
 
-.workflow-band article {
-    padding: 14px 16px;
+.story-card {
+    padding: 20px 18px;
 }
 
-.workflow-band span {
+.story-card span {
     color: var(--accent-deep);
     font-size: 0.78rem;
     font-weight: 800;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
 }
 
-.workflow-band strong {
+.story-card strong {
     display: block;
-    margin-top: 10px;
-    font-size: 1rem;
+    margin-top: 12px;
+    font-size: 1.12rem;
+    line-height: 1.3;
 }
 
-.workflow-band p,
+.story-card p,
 .hero-note,
 .support-text,
 .story-panel p,
@@ -400,22 +407,30 @@ pre {
 .boundary-card p,
 .empty-state p,
 .check-row p,
+.category-row p,
 .claim-toggle p,
-.policy-callout p {
-    margin: 8px 0 0;
+.policy-callout p,
+.proof-intro,
+.verdict-summary {
+    margin: 10px 0 0;
     color: var(--ink-soft);
     line-height: 1.6;
 }
 
+.hero-note {
+    margin-top: 10px;
+    font-size: 0.95rem;
+}
+
 .content-grid {
     display: grid;
-    gap: 16px;
+    gap: var(--space-section);
 }
 
 .section {
     display: grid;
-    gap: 16px;
-    padding: 22px;
+    gap: var(--space-block);
+    padding: 24px;
     border: 1px solid var(--line);
     border-radius: 28px;
     background:
@@ -424,13 +439,16 @@ pre {
 
 .section-head {
     display: flex;
-    align-items: end;
+    align-items: start;
     justify-content: space-between;
-    gap: 18px;
+    gap: 16px 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgb(23 34 40 / 0.08);
 }
 
-.alt-head {
-    align-items: start;
+.section-head > div {
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 .section-head h2 {
@@ -443,9 +461,27 @@ pre {
 }
 
 .section-head > span {
+    display: inline-flex;
+    align-items: center;
+    align-self: start;
+    flex: 0 1 auto;
+    max-width: 16rem;
+    min-height: 34px;
+    padding: 6px 14px;
+    border: 1px solid rgb(23 34 40 / 0.12);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.68);
     color: var(--ink-soft);
-    font-size: 0.92rem;
-    white-space: nowrap;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: 0.03em;
+    text-align: center;
+    white-space: normal;
+}
+
+.section > .section-head + * {
+    margin-top: 2px;
 }
 
 .section-deck {
@@ -464,7 +500,11 @@ pre {
 .privacy-grid,
 .disclosure-layout {
     display: grid;
-    gap: 16px;
+    gap: var(--space-block);
+}
+
+.section-spaced {
+    margin-top: 4px;
 }
 
 .issue-layout {
@@ -481,6 +521,7 @@ pre {
 
 .privacy-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-block);
 }
 
 .ledger-panel,
@@ -489,9 +530,8 @@ pre {
 .proof-shell,
 .binding-panel,
 .verification-panel,
-.chain-stage,
 .boundary-card {
-    padding: 18px;
+    padding: 20px;
 }
 
 .meta-grid,
@@ -499,7 +539,7 @@ pre {
 .registry-grid,
 .registry-details {
     display: grid;
-    gap: 12px;
+    gap: var(--space-row);
 }
 
 .meta-grid {
@@ -513,13 +553,71 @@ pre {
 .policy-tags,
 .claim-column,
 .chain-form,
-.mismatch-list {
+.mismatch-list,
+.status-cards,
+.category-list,
+.toggle-row {
     display: grid;
-    gap: 12px;
+    gap: var(--space-row);
+}
+
+.chain-flow {
+    display: grid;
+}
+
+.chain-flow {
+    gap: 0;
+}
+
+.chain-flow > * + * {
+    margin-top: var(--space-block);
 }
 
 .signature-stack {
-    margin-top: 14px;
+    margin-top: 16px;
+}
+
+.toggle-row {
+    margin-top: 0;
+    padding-top: 4px;
+}
+
+.ui-toggle {
+    justify-self: start;
+    min-height: 40px;
+    padding: 0 16px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.72);
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        border-color 160ms ease,
+        background 160ms ease,
+        color 160ms ease;
+}
+
+.ui-toggle:hover {
+    border-color: rgb(15 95 86 / 0.3);
+    background: rgb(15 95 86 / 0.06);
+    color: var(--signal);
+}
+
+.ui-toggle:focus-visible {
+    outline: 2px solid rgb(15 95 86 / 0.45);
+    outline-offset: 2px;
+}
+
+.disclosure-summary {
+    margin: 10px 0 0;
+    font-size: 0.98rem;
+}
+
+.disclosure-summary span {
+    font-weight: 700;
+    color: var(--ink);
 }
 
 .story-panel h3,
@@ -568,7 +666,8 @@ pre {
 }
 
 .policy-callout {
-    padding: 14px 16px;
+    padding: 16px 18px;
+    margin-top: 4px;
 }
 
 .policy-callout.good {
@@ -587,14 +686,15 @@ pre {
 .claim-column {
     max-height: 540px;
     overflow: auto;
-    padding-right: 4px;
+    padding: 4px 4px 4px 0;
+    gap: var(--space-row);
 }
 
 .claim-toggle {
     display: grid;
     grid-template-columns: 24px minmax(0, 1fr);
     gap: 12px;
-    padding: 14px;
+    padding: 16px;
     cursor: pointer;
     transition: border-color 160ms ease, background 160ms ease, transform 120ms ease;
 }
@@ -604,9 +704,31 @@ pre {
     border-color: rgb(15 95 86 / 0.28);
 }
 
-.claim-toggle.selected {
-    background: rgb(15 95 86 / 0.07);
-    border-color: rgb(15 95 86 / 0.24);
+.claim-toggle.selected,
+.claim-toggle.revealed {
+    background: rgb(15 95 86 / 0.09);
+    border-color: rgb(15 95 86 / 0.32);
+    box-shadow: inset 0 0 0 1px rgb(15 95 86 / 0.08);
+}
+
+.claim-toggle.hidden-claim:not(.selected) {
+    opacity: 0.88;
+}
+
+.claim-readable {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--ink);
+}
+
+.claim-raw {
+    margin-top: 8px;
+    font-size: 0.82rem;
+}
+
+.claim-badge.revealed-badge {
+    background: rgb(15 95 86 / 0.14);
+    color: var(--signal);
 }
 
 .claim-toggle input {
@@ -640,7 +762,8 @@ pre {
 .proof-tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 12px;
+    margin-top: 4px;
 }
 
 .proof-chip {
@@ -661,17 +784,28 @@ pre {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.proof-intro {
+    font-size: 1rem;
+}
+
+.proof-head-technical {
+    margin-top: 4px;
+}
+
 .proof-steps {
     display: grid;
-    gap: 10px;
+    gap: var(--space-row);
+    margin-top: 8px;
+    padding-top: var(--space-row);
+    border-top: 1px solid var(--line);
 }
 
 .proof-step {
     display: grid;
     grid-template-columns: 42px minmax(0, 1fr) minmax(140px, 200px);
-    gap: 12px;
+    gap: 14px;
     align-items: center;
-    padding: 12px 14px;
+    padding: 14px 16px;
 }
 
 .proof-step span {
@@ -700,14 +834,14 @@ pre {
 }
 
 .binding-panel article + article {
-    margin-top: 14px;
-    padding-top: 14px;
+    margin-top: 16px;
+    padding-top: 16px;
     border-top: 1px solid var(--line);
 }
 
 .verification-board {
     display: grid;
-    gap: 14px;
+    gap: var(--space-block);
 }
 
 .verification-verdict {
@@ -743,17 +877,57 @@ pre {
     font-size: 0.92rem;
 }
 
+.verdict-summary {
+    color: rgb(255 254 249 / 0.9);
+    font-size: 1rem;
+}
+
+.category-row {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 16px;
+}
+
+.category-row h4 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.category-row span {
+    min-width: 64px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.category-row.pass span {
+    color: var(--signal);
+}
+
+.category-row.fail span {
+    color: var(--danger);
+}
+
 .check-list {
     display: grid;
-    gap: 10px;
+    gap: var(--space-row);
+}
+
+.advanced-check-list {
+    margin-top: 0;
+    padding-top: var(--space-row);
+    border-top: 1px solid var(--line);
 }
 
 .check-row {
     display: flex;
     align-items: start;
     justify-content: space-between;
-    gap: 12px;
-    padding: 14px;
+    gap: 14px;
+    padding: 16px;
 }
 
 .check-row h4 {
@@ -775,6 +949,114 @@ pre {
 
 .check-row.fail span {
     color: var(--danger);
+}
+
+.chain-status-band {
+    display: grid;
+    gap: var(--space-row);
+}
+
+.chain-primary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 18px 0;
+    border-top: 1px solid rgb(23 34 40 / 0.08);
+}
+
+.chain-help-panel {
+    padding: 18px 20px;
+    border-radius: 18px;
+    background: rgb(255 253 248 / 0.72);
+    border: 1px solid rgb(23 34 40 / 0.1);
+}
+
+.chain-help-panel strong {
+    display: block;
+    font-size: 1.05rem;
+}
+
+.chain-help-panel p {
+    margin: 10px 0 0;
+    color: var(--ink-soft);
+    line-height: 1.6;
+}
+
+.chain-help-panel.error {
+    background: rgb(248 221 217 / 0.72);
+    border-color: rgb(157 47 36 / 0.14);
+}
+
+.chain-advanced-toggle {
+    padding-top: 2px;
+}
+
+.verification-board .category-row {
+    border-color: rgb(23 34 40 / 0.09);
+    background: rgb(255 253 248 / 0.7);
+}
+
+.verification-board .check-row {
+    border-color: rgb(23 34 40 / 0.09);
+    background: rgb(255 253 248 / 0.7);
+}
+
+.chain-advanced {
+    display: grid;
+    gap: var(--space-block);
+    margin-top: 0;
+    padding: 20px;
+    border-radius: 20px;
+}
+
+.nested-band {
+    background: rgb(23 34 40 / 0.03);
+    border: 1px solid rgb(23 34 40 / 0.08);
+    box-shadow: none;
+}
+
+.status-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-row);
+}
+
+.status-card {
+    padding: 18px;
+}
+
+.status-card span {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 0.77rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.status-card strong {
+    display: block;
+    margin-top: 10px;
+    font-size: 1.2rem;
+}
+
+.status-card p {
+    margin: 10px 0 0;
+    color: var(--ink-soft);
+    line-height: 1.55;
+}
+
+.status-card.good {
+    background: rgb(217 239 233 / 0.72);
+    border-color: rgb(15 95 86 / 0.2);
+}
+
+.status-card.bad {
+    background: rgb(248 221 217 / 0.88);
+    border-color: rgb(157 47 36 / 0.18);
+}
+
+.status-card.neutral {
+    background: rgb(255 253 248 / 0.82);
 }
 
 .chain-form {
@@ -814,7 +1096,7 @@ pre {
 
 .registry-grid article,
 .registry-details div {
-    padding: 14px;
+    padding: 16px;
 }
 
 .registry-details {
@@ -866,7 +1148,13 @@ pre {
 }
 
 .empty-state {
-    padding: 16px;
+    padding: 18px 20px;
+}
+
+.proof-shell .toggle-row,
+.verification-board .toggle-row,
+.policy-panel .toggle-row {
+    padding-top: 8px;
 }
 
 @media (max-width: 1180px) {
@@ -881,21 +1169,31 @@ pre {
         grid-template-columns: 1fr;
     }
 
-    .workflow-band {
+    .story-band,
+    .status-cards {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .section-head {
-        align-items: start;
         flex-direction: column;
+        gap: 12px;
+        padding-bottom: 12px;
     }
 
     .section-head > span {
-        white-space: normal;
+        align-self: start;
+        max-width: 100%;
+        text-align: left;
     }
 }
 
 @media (max-width: 760px) {
+    :root {
+        --space-section: 22px;
+        --space-block: 16px;
+        --space-row: 12px;
+    }
+
     #app {
         width: min(100vw - 18px, 1440px);
         padding-top: 12px;
@@ -912,7 +1210,8 @@ pre {
         font-size: clamp(2.5rem, 13vw, 4rem);
     }
 
-    .workflow-band {
+    .story-band,
+    .status-cards {
         grid-template-columns: 1fr;
     }
 

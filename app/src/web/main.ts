@@ -21,6 +21,15 @@ import {
     summarizeClaimValue,
     type DemoScenario
 } from "../util/v2Demo.js";
+import {
+    claimLabel,
+    DEMO_STORY_CARDS,
+    formatClaimReadableValue,
+    formatHiddenSummary,
+    formatRevealedSummary,
+    groupVerificationChecks,
+    requiredClaimLabels
+} from "../util/webUi.js";
 
 interface ChainInputs {
     rpcUrl: string;
@@ -51,6 +60,15 @@ interface AppNotice {
     text: string;
 }
 
+interface UiToggles {
+    showHeroTechnical: boolean;
+    showCredentialDetails: boolean;
+    showRawClaims: boolean;
+    showAdvancedVerification: boolean;
+    showMerkleInternals: boolean;
+    showAdvancedChain: boolean;
+}
+
 interface AppState {
     selectedClaims: Set<string>;
     scenario: DemoScenario;
@@ -62,6 +80,7 @@ interface AppState {
     busyLabel?: string;
     notice?: AppNotice;
     proofFocusKey?: string;
+    toggles: UiToggles;
 }
 
 const CHAIN_STORAGE_KEY = "credential-dapp-v2-chain";
@@ -76,7 +95,15 @@ const state: AppState = {
         issuerRegistryV2: storedChain.issuerRegistryV2 ?? "",
         credentialRegistryV2: storedChain.credentialRegistryV2 ?? ""
     },
-    proofFocusKey: DEMO_REQUIRED_CLAIMS[0]
+    proofFocusKey: DEMO_REQUIRED_CLAIMS[0],
+    toggles: {
+        showHeroTechnical: false,
+        showCredentialDetails: false,
+        showRawClaims: false,
+        showAdvancedVerification: false,
+        showMerkleInternals: false,
+        showAdvancedChain: false
+    }
 };
 
 void primeDemo();
@@ -256,16 +283,34 @@ async function refreshChainSnapshot(txHash?: string): Promise<void> {
 
 function buttonLabel(action: string): string {
     const labels: Record<string, string> = {
-        issue: "Issue Fresh Sample",
-        "match-policy": "Match Verifier Policy",
-        verify: "Run Verification",
-        "refresh-chain": "Refresh Chain State",
-        "register-org": "Register Organization",
-        anchor: "Anchor Credential",
-        revoke: "Revoke Credential",
-        suspend: "Suspend Issuer"
+        issue: "Issue credential",
+        "match-policy": "Reveal required facts",
+        verify: "Verify proof",
+        "refresh-chain": "Refresh blockchain status",
+        "register-org": "Register organization",
+        anchor: "Anchor credential",
+        revoke: "Revoke credential",
+        suspend: "Suspend issuer"
     };
     return labels[action] ?? action;
+}
+
+function renderToggle(
+    key: keyof UiToggles,
+    label: string,
+    options: {expanded?: boolean} = {}
+): string {
+    const expanded = options.expanded ?? state.toggles[key];
+    return `
+        <button
+            type="button"
+            class="ui-toggle"
+            data-toggle="${key}"
+            aria-expanded="${expanded ? "true" : "false"}"
+        >
+            ${escapeHtml(label)}
+        </button>
+    `;
 }
 
 function isBusy(action: string): boolean {
@@ -297,8 +342,8 @@ function renderVerificationSummary(): string {
     if (!state.scenario.presentation) {
         return `
             <div class="empty-state">
-                <strong>Presentation blocked</strong>
-                <p>${escapeHtml(state.scenario.presentationError ?? "Select the exact verifier-required claims to continue.")}</p>
+                <strong>Cannot verify yet</strong>
+                <p>${escapeHtml(state.scenario.presentationError ?? "Reveal exactly the three facts the verifier asked for, then run verification.")}</p>
             </div>
         `;
     }
@@ -306,37 +351,61 @@ function renderVerificationSummary(): string {
     if (!state.verificationRan || !state.verification) {
         return `
             <div class="empty-state">
-                <strong>Verification ready</strong>
-                <p>The credential, request, and holder authorization are prepared. Run verification to inspect every cryptographic check.</p>
+                <strong>Ready to verify</strong>
+                <p>The student has revealed only the required facts. Click Verify proof to confirm everything checks out.</p>
             </div>
         `;
     }
 
-    const passed = state.verification.checks.filter((check) => check.passed).length;
     const verdictClass = state.verification.valid ? "good" : "bad";
+    const groups = groupVerificationChecks(state.verification.checks);
 
     return `
         <div class="verification-board ${verdictClass}">
             <div class="verification-verdict">
-                <span>Verification</span>
-                <strong>${state.verification.valid ? "Accepted" : "Rejected"}</strong>
-                <small>${passed}/${state.verification.checks.length} checks passed</small>
+                <span>Result</span>
+                <strong>${state.verification.valid ? "Verification passed" : "Verification failed"}</strong>
+                <p class="verdict-summary">
+                    ${state.verification.valid
+                        ? "The proof is valid, the issuer signature is trusted, and hidden transcript data was not revealed."
+                        : "One or more checks failed. Open the advanced verification log to see which step did not pass."}
+                </p>
             </div>
-            <div class="check-list">
-                ${state.verification.checks
+            <div class="category-list">
+                ${groups
                     .map(
-                        (check) => `
-                            <article class="check-row ${check.passed ? "pass" : "fail"}">
+                        (group) => `
+                            <article class="category-row ${group.passed ? "pass" : "fail"}">
                                 <div>
-                                    <h4>${escapeHtml(check.name)}</h4>
-                                    <p>${escapeHtml(check.code)}${check.detail ? ` | ${escapeHtml(check.detail)}` : ""}</p>
+                                    <h4>${escapeHtml(group.label)}</h4>
+                                    <p>${group.checks.length} check${group.checks.length === 1 ? "" : "s"}</p>
                                 </div>
-                                <span>${check.passed ? "PASS" : "FAIL"}</span>
+                                <span>${group.passed ? "Passed" : "Failed"}</span>
                             </article>
                         `
                     )
                     .join("")}
             </div>
+            <div class="toggle-row">
+                ${renderToggle("showAdvancedVerification", "Advanced verification log")}
+            </div>
+            ${state.toggles.showAdvancedVerification ? `
+                <div class="check-list advanced-check-list">
+                    ${state.verification.checks
+                        .map(
+                            (check) => `
+                                <article class="check-row ${check.passed ? "pass" : "fail"}">
+                                    <div>
+                                        <h4>${escapeHtml(check.name)}</h4>
+                                        <p>${escapeHtml(check.code)}${check.detail ? ` | ${escapeHtml(check.detail)}` : ""}</p>
+                                    </div>
+                                    <span>${check.passed ? "PASS" : "FAIL"}</span>
+                                </article>
+                            `
+                        )
+                        .join("")}
+                </div>
+            ` : ""}
         </div>
     `;
 }
@@ -348,14 +417,18 @@ function renderProofPanel(): string {
     if (!state.scenario.presentation || !focus) {
         return `
             <div class="empty-state">
-                <strong>No Merkle path yet</strong>
-                <p>Once the selected disclosure exactly matches the verifier request, the holder presentation reveals claim salts and sibling hashes for only those leaves.</p>
+                <strong>Proof not available yet</strong>
+                <p>Reveal exactly the three required facts first. The student can then prove each one without exposing the rest of the transcript.</p>
             </div>
         `;
     }
 
     return `
         <div class="proof-shell">
+            <p class="proof-intro">
+                Each revealed fact is linked to the full credential through a Merkle tree.
+                The verifier can confirm the fact is authentic without seeing hidden transcript rows.
+            </p>
             <div class="proof-tabs">
                 ${state.scenario.presentation.disclosed
                     .map(
@@ -365,7 +438,7 @@ function renderProofPanel(): string {
                                 class="proof-chip ${claim.key === focus.key ? "active" : ""}"
                                 data-proof-key="${claim.key}"
                             >
-                                ${escapeHtml(claim.key)}
+                                ${escapeHtml(claimLabel(claim.key))}
                             </button>
                         `
                     )
@@ -373,37 +446,52 @@ function renderProofPanel(): string {
             </div>
             <div class="proof-head">
                 <div>
-                    <span>Focused leaf</span>
-                    <strong>${escapeHtml(focus.key)}</strong>
+                    <span>Revealed fact</span>
+                    <strong>${escapeHtml(claimLabel(focus.key))}</strong>
                 </div>
                 <div>
-                    <span>Proof depth</span>
-                    <strong>${focus.proof.length} steps</strong>
+                    <span>Readable value</span>
+                    <strong>${escapeHtml(formatClaimReadableValue(focus))}</strong>
                 </div>
             </div>
-            <div class="proof-steps">
-                ${focus.proof
-                    .map(
-                        (sibling, index) => `
-                            <article class="proof-step">
-                                <span>${index + 1}</span>
-                                <code>${escapeHtml(short(sibling, 18, 12))}</code>
-                                <small>${focus.positions[index] ? "Current hash was right child" : "Current hash was left child"}</small>
-                            </article>
-                        `
-                    )
-                    .join("")}
+            <div class="toggle-row">
+                ${renderToggle("showMerkleInternals", "Show Merkle proof internals")}
             </div>
-            <div class="proof-foot">
-                <div>
-                    <span>Salt</span>
-                    <code>${escapeHtml(short(focus.salt, 18, 12))}</code>
+            ${state.toggles.showMerkleInternals ? `
+                <div class="proof-head proof-head-technical">
+                    <div>
+                        <span>Proof depth</span>
+                        <strong>${focus.proof.length} steps</strong>
+                    </div>
+                    <div>
+                        <span>Leaf key</span>
+                        <code>${escapeHtml(focus.key)}</code>
+                    </div>
                 </div>
-                <div>
-                    <span>Value</span>
-                    <code>${escapeHtml(summarizeClaimValue(focus.value))}</code>
+                <div class="proof-steps">
+                    ${focus.proof
+                        .map(
+                            (sibling, index) => `
+                                <article class="proof-step">
+                                    <span>${index + 1}</span>
+                                    <code>${escapeHtml(short(sibling, 18, 12))}</code>
+                                    <small>${focus.positions[index] ? "Current hash was right child" : "Current hash was left child"}</small>
+                                </article>
+                            `
+                        )
+                        .join("")}
                 </div>
-            </div>
+                <div class="proof-foot">
+                    <div>
+                        <span>Salt</span>
+                        <code>${escapeHtml(short(focus.salt, 18, 12))}</code>
+                    </div>
+                    <div>
+                        <span>Raw value</span>
+                        <code>${escapeHtml(summarizeClaimValue(focus.value))}</code>
+                    </div>
+                </div>
+            ` : ""}
         </div>
     `;
 }
@@ -414,14 +502,16 @@ function renderClaims(): string {
             const checked = state.selectedClaims.has(claim.key);
             const requested = DEMO_REQUIRED_CLAIMS.includes(claim.key as (typeof DEMO_REQUIRED_CLAIMS)[number]);
             return `
-                <label class="claim-toggle ${checked ? "selected" : ""}">
+                <label class="claim-toggle ${checked ? "selected revealed" : "hidden-claim"}">
                     <input type="checkbox" data-claim-key="${claim.key}" ${checked ? "checked" : ""} />
                     <div>
                         <div class="claim-head">
-                            <strong>${escapeHtml(claim.key)}</strong>
-                            ${requested ? '<span class="claim-badge">Required</span>' : '<span class="claim-badge muted">Hidden by default</span>'}
+                            <strong>${escapeHtml(claimLabel(claim.key))}</strong>
+                            ${requested ? '<span class="claim-badge">Required</span>' : '<span class="claim-badge muted">Stays hidden</span>'}
+                            ${checked ? '<span class="claim-badge revealed-badge">Revealed</span>' : ""}
                         </div>
-                        <p>${escapeHtml(summarizeClaimValue(claim.value))}</p>
+                        <p class="claim-readable">${escapeHtml(formatClaimReadableValue(claim))}</p>
+                        ${state.toggles.showRawClaims ? `<p class="claim-raw"><code>${escapeHtml(summarizeClaimValue(claim.value))}</code></p>` : ""}
                     </div>
                 </label>
             `;
@@ -430,151 +520,248 @@ function renderClaims(): string {
 }
 
 function renderPolicyWarnings(): string {
+    const revealed = formatRevealedSummary(
+        state.scenario.policy.selectedClaimKeys.filter((key) =>
+            DEMO_REQUIRED_CLAIMS.includes(key as (typeof DEMO_REQUIRED_CLAIMS)[number])
+        )
+    );
+    const hidden = formatHiddenSummary(state.scenario.policy.hiddenCount);
+
     if (state.scenario.policy.exactMatch) {
         return `
             <div class="policy-callout good">
-                <strong>Request matched exactly</strong>
-                <p>The holder reveals only the three policy-required facts and keeps the rest of the transcript private.</p>
+                <strong>Only these facts are revealed</strong>
+                <p class="disclosure-summary"><span>Revealed:</span> ${escapeHtml(revealed)}</p>
+                <p class="disclosure-summary"><span>Hidden:</span> ${escapeHtml(hidden)}</p>
             </div>
         `;
     }
 
     return `
         <div class="policy-callout bad">
-            <strong>Policy mismatch</strong>
-            <p>${escapeHtml(state.scenario.presentationError ?? "The selected disclosure no longer matches the verifier request.")}</p>
+            <strong>Selection does not match the verifier request</strong>
+            <p>${escapeHtml(state.scenario.presentationError ?? "Reveal exactly degree field, GPA, and thesis — no more, no less.")}</p>
         </div>
     `;
+}
+
+function renderChainStatusCards(snapshot?: ChainSnapshot): string {
+    if (!snapshot || snapshot.error) {
+        return `
+            <div class="status-cards">
+                <article class="status-card neutral">
+                    <span>Issuer authorized</span>
+                    <strong>Not checked yet</strong>
+                    <p>Connect to a local chain and refresh to see live status.</p>
+                </article>
+                <article class="status-card neutral">
+                    <span>Credential anchored</span>
+                    <strong>Unknown</strong>
+                    <p>Anchor the credential on-chain to record its status.</p>
+                </article>
+                <article class="status-card neutral">
+                    <span>Not revoked</span>
+                    <strong>Unknown</strong>
+                    <p>Revocation status appears after a registry read.</p>
+                </article>
+                <article class="status-card neutral">
+                    <span>Issuer active</span>
+                    <strong>Unknown</strong>
+                    <p>Issuer activity is checked against the registry.</p>
+                </article>
+            </div>
+        `;
+    }
+
+    const issuerAuthorized = snapshot.organizationRegistered;
+    const credentialAnchored = Boolean(snapshot.anchorExists);
+    const notRevoked = !snapshot.isRevoked;
+    const issuerActive = Boolean(snapshot.organizationActive);
+
+    return `
+        <div class="status-cards">
+            <article class="status-card ${issuerAuthorized ? "good" : "bad"}">
+                <span>Issuer authorized</span>
+                <strong>${issuerAuthorized ? "Yes" : "No"}</strong>
+                <p>${escapeHtml(snapshot.organizationName ?? DEMO_ORGANIZATION.name)} is ${issuerAuthorized ? "registered" : "not registered"} on the chain.</p>
+            </article>
+            <article class="status-card ${credentialAnchored ? "good" : "neutral"}">
+                <span>Credential anchored</span>
+                <strong>${credentialAnchored ? "Yes" : "No"}</strong>
+                <p>${credentialAnchored ? "A commitment for this credential exists on-chain." : "Not anchored yet — use Anchor credential in advanced setup."}</p>
+            </article>
+            <article class="status-card ${notRevoked ? "good" : "bad"}">
+                <span>Not revoked</span>
+                <strong>${notRevoked ? "Yes" : "No"}</strong>
+                <p>${notRevoked ? "No revocation flag is set for this credential." : "This credential has been revoked on-chain."}</p>
+            </article>
+            <article class="status-card ${issuerActive ? "good" : "bad"}">
+                <span>Issuer active</span>
+                <strong>${issuerActive ? "Yes" : "No"}</strong>
+                <p>${issuerActive ? "The issuing organization is active." : "The issuer organization is inactive or suspended."}</p>
+            </article>
+        </div>
+    `;
+}
+
+function renderChainHelpPanel(): string {
+    const chainReady = isChainConfigured();
+    const snapshot = state.chainSnapshot;
+
+    if (!chainReady) {
+        return `
+            <div class="chain-help-panel">
+                <strong>Blockchain not connected</strong>
+                <p>Open advanced local chain setup below and enter contract addresses to check live registry status.</p>
+            </div>
+        `;
+    }
+
+    if (snapshot?.error) {
+        return `
+            <div class="chain-help-panel error">
+                <strong>Registry read failed</strong>
+                <p>${escapeHtml(snapshot.error)}</p>
+            </div>
+        `;
+    }
+
+    if (!snapshot) {
+        return `
+            <div class="chain-help-panel">
+                <strong>Ready to check blockchain status</strong>
+                <p>Click Refresh blockchain status to read issuer authorization, anchoring, and revocation state.</p>
+            </div>
+        `;
+    }
+
+    return "";
 }
 
 function renderChainPanel(): string {
     const chainReady = isChainConfigured();
     const snapshot = state.chainSnapshot;
     const chainDisabled = !chainReady;
+    const helpPanel = renderChainHelpPanel();
 
     return `
-        <div class="chain-stage">
-            <div class="chain-form">
-                <label>
-                    <span>RPC URL</span>
-                    <input data-chain-field="rpcUrl" value="${escapeHtml(state.chainInputs.rpcUrl)}" />
-                </label>
-                <label>
-                    <span>IssuerRegistryV2</span>
-                    <input
-                        data-chain-field="issuerRegistryV2"
-                        value="${escapeHtml(state.chainInputs.issuerRegistryV2)}"
-                        placeholder="0x..."
-                    />
-                </label>
-                <label>
-                    <span>CredentialRegistryV2</span>
-                    <input
-                        data-chain-field="credentialRegistryV2"
-                        value="${escapeHtml(state.chainInputs.credentialRegistryV2)}"
-                        placeholder="0x..."
-                    />
-                </label>
+        <div class="chain-flow">
+            <div class="chain-status-band">
+                ${renderChainStatusCards(snapshot)}
             </div>
-            <div class="action-cluster">
+            <div class="chain-primary-actions">
                 ${renderButton("refresh-chain", {variant: "primary", disabled: chainDisabled})}
-                ${renderButton("register-org", {disabled: chainDisabled})}
-                ${renderButton("anchor", {disabled: chainDisabled})}
-                ${renderButton("revoke", {variant: "danger", disabled: chainDisabled})}
-                ${renderButton("suspend", {variant: "ghost", disabled: chainDisabled})}
             </div>
-            <p class="chain-note">
-                ${escapeHtml(
-                    `${DEMO_ROLE_COPY.registerOrganization} ${DEMO_ROLE_COPY.suspendOrganization} ${DEMO_ROLE_COPY.anchorCredential} ${DEMO_ROLE_COPY.revokeCredential} ${DEMO_ROLE_COPY.organizationAdministration}`
-                )}
-            </p>
-            ${!chainReady ? `
-                <div class="empty-state">
-                    <strong>Registry connection not configured</strong>
-                    <p>Point the demo at local V2 contract addresses from <code>DeployV2.s.sol</code> to activate live anchor and status reads.</p>
-                </div>
-            ` : ""}
-            ${chainReady && snapshot?.error ? `
-                <div class="empty-state error">
-                    <strong>Registry read failed</strong>
-                    <p>${escapeHtml(snapshot.error)}</p>
-                </div>
-            ` : ""}
-            ${chainReady && !snapshot ? `
-                <div class="empty-state">
-                    <strong>Chain state ready</strong>
-                    <p>Use Refresh Chain State to read organization status, anchor comparison, revocation bitmap details, and current V2 status precedence.</p>
-                </div>
-            ` : ""}
-            ${chainReady && snapshot && !snapshot.error ? `
-                <div class="registry-grid">
-                    <article>
-                        <span>Organization</span>
-                        <strong>${escapeHtml(snapshot.organizationName ?? DEMO_ORGANIZATION.name)}</strong>
-                        <p>${snapshot.organizationRegistered ? "Registered on chain" : "Not yet registered"}</p>
-                    </article>
-                    <article>
-                        <span>Issuer epoch</span>
-                        <strong>${snapshot.organizationEpoch ?? "Unavailable"}</strong>
-                        <p>${snapshot.organizationActive ? "Active controller path" : "Inactive or unknown"}</p>
-                    </article>
-                    <article>
-                        <span>StatusOf</span>
-                        <strong>${escapeHtml(formatStatus(snapshot.status))}</strong>
-                        <p>${snapshot.isRevoked ? "Revocation bit is set" : "Revocation bit is clear"}</p>
-                    </article>
-                    <article>
-                        <span>Next revocation index</span>
-                        <strong>${snapshot.nextRevocationIndex ?? "Unavailable"}</strong>
-                        <p>Word ${snapshot.revocationWordIndex?.toString() ?? "0"}: ${escapeHtml(short(formatWord(snapshot.revocationWordValue), 18, 12))}</p>
-                    </article>
-                </div>
-                <div class="registry-details">
-                    <div>
-                        <span>Anchor key</span>
-                        <code>${escapeHtml(short(state.scenario.anchorKey, 20, 14))}</code>
+            ${helpPanel}
+            <div class="chain-advanced-toggle">
+                ${renderToggle("showAdvancedChain", "Advanced local chain setup")}
+            </div>
+            ${state.toggles.showAdvancedChain ? `
+                <div class="chain-advanced nested-band">
+                    <div class="chain-form">
+                        <label>
+                            <span>RPC URL</span>
+                            <input data-chain-field="rpcUrl" value="${escapeHtml(state.chainInputs.rpcUrl)}" />
+                        </label>
+                        <label>
+                            <span>IssuerRegistryV2</span>
+                            <input
+                                data-chain-field="issuerRegistryV2"
+                                value="${escapeHtml(state.chainInputs.issuerRegistryV2)}"
+                                placeholder="0x..."
+                            />
+                        </label>
+                        <label>
+                            <span>CredentialRegistryV2</span>
+                            <input
+                                data-chain-field="credentialRegistryV2"
+                                value="${escapeHtml(state.chainInputs.credentialRegistryV2)}"
+                                placeholder="0x..."
+                            />
+                        </label>
                     </div>
-                    <div>
-                        <span>Holder commitment</span>
-                        <code>${escapeHtml(short(state.scenario.holderCommitment, 20, 14))}</code>
+                    <div class="action-cluster">
+                        ${renderButton("register-org", {disabled: chainDisabled})}
+                        ${renderButton("anchor", {disabled: chainDisabled})}
+                        ${renderButton("revoke", {variant: "danger", disabled: chainDisabled})}
+                        ${renderButton("suspend", {variant: "ghost", disabled: chainDisabled})}
                     </div>
-                    <div>
-                        <span>Anchor record</span>
-                        <code>${snapshot.anchorExists ? "Present" : "Not anchored"}</code>
-                    </div>
-                    <div>
-                        <span>Revocation slot</span>
-                        <code>${snapshot.anchorRevocationIndex?.toString() ?? "Unavailable"}</code>
-                    </div>
-                </div>
-                <div class="comparison-panel ${snapshot.anchorComparison?.matches ? "good" : "neutral"}">
-                    <div class="comparison-head">
-                        <strong>On-chain anchor comparison</strong>
-                        <span>
-                            ${snapshot.anchorComparison
-                                ? snapshot.anchorComparison.matches
-                                    ? "All anchored fields match the local V2 credential."
-                                    : `${snapshot.anchorComparison.mismatches.length} mismatch codes returned.`
-                                : "Anchor comparison becomes available after the credential is anchored."}
-                        </span>
-                    </div>
-                    ${snapshot.anchorComparison && !snapshot.anchorComparison.matches ? `
-                        <div class="mismatch-list">
-                            ${snapshot.anchorComparison.mismatches
-                                .map(
-                                    (mismatch) => `
-                                        <article>
-                                            <strong>${escapeHtml(mismatch.code)}</strong>
-                                            <p>Expected ${escapeHtml(String(mismatch.expected))}</p>
-                                            <p>Actual ${escapeHtml(String(mismatch.actual))}</p>
-                                        </article>
-                                    `
-                                )
-                                .join("")}
+                    <p class="chain-note">
+                        ${escapeHtml(
+                            `${DEMO_ROLE_COPY.registerOrganization} ${DEMO_ROLE_COPY.suspendOrganization} ${DEMO_ROLE_COPY.anchorCredential} ${DEMO_ROLE_COPY.revokeCredential} ${DEMO_ROLE_COPY.organizationAdministration}`
+                        )}
+                    </p>
+                    ${chainReady && snapshot && !snapshot.error ? `
+                        <div class="registry-grid">
+                            <article>
+                                <span>Organization</span>
+                                <strong>${escapeHtml(snapshot.organizationName ?? DEMO_ORGANIZATION.name)}</strong>
+                                <p>${snapshot.organizationRegistered ? "Registered on chain" : "Not yet registered"}</p>
+                            </article>
+                            <article>
+                                <span>Issuer epoch</span>
+                                <strong>${snapshot.organizationEpoch ?? "Unavailable"}</strong>
+                                <p>${snapshot.organizationActive ? "Active controller path" : "Inactive or unknown"}</p>
+                            </article>
+                            <article>
+                                <span>StatusOf</span>
+                                <strong>${escapeHtml(formatStatus(snapshot.status))}</strong>
+                                <p>${snapshot.isRevoked ? "Revocation bit is set" : "Revocation bit is clear"}</p>
+                            </article>
+                            <article>
+                                <span>Next revocation index</span>
+                                <strong>${snapshot.nextRevocationIndex ?? "Unavailable"}</strong>
+                                <p>Word ${snapshot.revocationWordIndex?.toString() ?? "0"}: ${escapeHtml(short(formatWord(snapshot.revocationWordValue), 18, 12))}</p>
+                            </article>
                         </div>
+                        <div class="registry-details">
+                            <div>
+                                <span>Anchor key</span>
+                                <code>${escapeHtml(short(state.scenario.anchorKey, 20, 14))}</code>
+                            </div>
+                            <div>
+                                <span>Holder commitment</span>
+                                <code>${escapeHtml(short(state.scenario.holderCommitment, 20, 14))}</code>
+                            </div>
+                            <div>
+                                <span>Anchor record</span>
+                                <code>${snapshot.anchorExists ? "Present" : "Not anchored"}</code>
+                            </div>
+                            <div>
+                                <span>Revocation slot</span>
+                                <code>${snapshot.anchorRevocationIndex?.toString() ?? "Unavailable"}</code>
+                            </div>
+                        </div>
+                        <div class="comparison-panel ${snapshot.anchorComparison?.matches ? "good" : "neutral"}">
+                            <div class="comparison-head">
+                                <strong>On-chain anchor comparison</strong>
+                                <span>
+                                    ${snapshot.anchorComparison
+                                        ? snapshot.anchorComparison.matches
+                                            ? "All anchored fields match the local V2 credential."
+                                            : `${snapshot.anchorComparison.mismatches.length} mismatch codes returned.`
+                                        : "Anchor comparison becomes available after the credential is anchored."}
+                                </span>
+                            </div>
+                            ${snapshot.anchorComparison && !snapshot.anchorComparison.matches ? `
+                                <div class="mismatch-list">
+                                    ${snapshot.anchorComparison.mismatches
+                                        .map(
+                                            (mismatch) => `
+                                                <article>
+                                                    <strong>${escapeHtml(mismatch.code)}</strong>
+                                                    <p>Expected ${escapeHtml(String(mismatch.expected))}</p>
+                                                    <p>Actual ${escapeHtml(String(mismatch.actual))}</p>
+                                                </article>
+                                            `
+                                        )
+                                        .join("")}
+                                </div>
+                            ` : ""}
+                        </div>
+                        ${snapshot.txHash ? `<p class="chain-note">Latest transaction: <code>${escapeHtml(short(snapshot.txHash, 18, 14))}</code></p>` : ""}
                     ` : ""}
                 </div>
-                ${snapshot.txHash ? `<p class="chain-note">Latest transaction: <code>${escapeHtml(short(snapshot.txHash, 18, 14))}</code></p>` : ""}
             ` : ""}
         </div>
     `;
@@ -586,16 +773,16 @@ function render(): void {
 
     const disclosedCount = state.scenario.policy.disclosedCount;
     const hiddenCount = state.scenario.policy.hiddenCount;
-    const verificationPassed = state.verification?.checks.filter((check) => check.passed).length ?? 0;
 
     app.innerHTML = `
         <div class="page-shell">
             <header class="hero">
                 <div class="hero-copy">
-                    <p class="eyebrow">Protocol V2 browser capstone demo</p>
-                    <h1>Cryptographic control room for premium university credentials</h1>
+                    <p class="eyebrow">Academic credential demo</p>
+                    <h1>Prove graduation without revealing your transcript</h1>
                     <p class="hero-text">
-                        Issue, disclose, verify, and reconcile a university credential against Protocol V2 commitments without exposing hidden transcript data.
+                        Watch a university issue a credential, a student share only what a verifier needs,
+                        and a blockchain registry confirm the result — while private transcript details stay hidden.
                     </p>
                     <div class="hero-actions">
                         ${renderButton("issue", {variant: "primary"})}
@@ -605,92 +792,119 @@ function render(): void {
                 </div>
                 <aside class="hero-rail">
                     <div class="metric-block">
-                        <span>Issuer organization</span>
+                        <span>University</span>
                         <strong>${escapeHtml(DEMO_ORGANIZATION.name)}</strong>
-                        <code>${escapeHtml(short(state.scenario.credential.issuerOrganizationId, 18, 12))}</code>
+                        <p class="hero-note">${disclosedCount} facts revealed · ${hiddenCount} stay private</p>
                     </div>
-                    <div class="metric-strip">
-                        <article>
-                            <span>Credential digest</span>
-                            <strong>${escapeHtml(short(state.scenario.credentialDigest, 16, 10))}</strong>
-                        </article>
-                        <article>
-                            <span>Merkle root</span>
-                            <strong>${escapeHtml(short(state.scenario.credential.merkleRoot, 16, 10))}</strong>
-                        </article>
-                        <article>
-                            <span>Disclosure split</span>
-                            <strong>${disclosedCount} shown / ${hiddenCount} hidden</strong>
-                        </article>
+                    <div class="toggle-row">
+                        ${renderToggle("showHeroTechnical", "Inspect technical identifiers")}
                     </div>
+                    ${state.toggles.showHeroTechnical ? `
+                        <div class="metric-strip">
+                            <article>
+                                <span>Organization id</span>
+                                <code>${escapeHtml(short(state.scenario.credential.issuerOrganizationId, 18, 12))}</code>
+                            </article>
+                            <article>
+                                <span>Credential digest</span>
+                                <code>${escapeHtml(short(state.scenario.credentialDigest, 16, 10))}</code>
+                            </article>
+                            <article>
+                                <span>Merkle root</span>
+                                <code>${escapeHtml(short(state.scenario.credential.merkleRoot, 16, 10))}</code>
+                            </article>
+                        </div>
+                    ` : ""}
                 </aside>
             </header>
 
             ${state.notice ? `<div class="notice ${state.notice.kind}">${escapeHtml(state.notice.text)}</div>` : ""}
             ${state.busyLabel ? `<div class="status-line"><span></span>${escapeHtml(state.busyLabel)}</div>` : ""}
 
-            <section class="workflow-band">
-                <article><span>01</span><strong>Issue Credential</strong><p>University issuer signs an eight-claim academic record.</p></article>
-                <article><span>02</span><strong>Selective Disclosure</strong><p>Holder reveals only the verifier-required facts.</p></article>
-                <article><span>03</span><strong>Merkle Proof</strong><p>Disclosed leaves are proven against one credential root.</p></article>
-                <article><span>04</span><strong>Verification</strong><p>Verifier checks audience, policy, signatures, and binding.</p></article>
-                <article><span>05</span><strong>Registry V2</strong><p>Optional anchor comparison surfaces status, revocation, or issuer inactivity.</p></article>
+            <section class="story-band">
+                ${DEMO_STORY_CARDS
+                    .map(
+                        (card) => `
+                            <article class="story-card">
+                                <span>${escapeHtml(card.role)}</span>
+                                <strong>${escapeHtml(card.title)}</strong>
+                                <p>${escapeHtml(card.body)}</p>
+                            </article>
+                        `
+                    )
+                    .join("")}
             </section>
 
             <main class="content-grid">
                 <section class="section issue">
                     <div class="section-head">
                         <div>
-                            <h2>University-issued sample anchored to a single Merkle root</h2>
+                            <h2>Step 1 — University issues a credential</h2>
+                            <p class="section-deck">${escapeHtml(DEMO_ORGANIZATION.name)} signs a full academic record with eight facts. Most stay private unless the student chooses to reveal them.</p>
                         </div>
-                        <span>V2 credential metadata and signatures</span>
+                        <span>${state.scenario.credential.claimCount} facts in the credential</span>
                     </div>
                     <div class="issue-layout">
                         <div class="ledger-panel">
-                            <div class="meta-grid">
+                            <div class="meta-grid meta-grid-simple">
                                 <article>
-                                    <span>Issuer signing address</span>
-                                    <code>${escapeHtml(short(state.scenario.credential.issuerSigningAddress, 18, 12))}</code>
+                                    <span>Issued by</span>
+                                    <strong>${escapeHtml(DEMO_ORGANIZATION.name)}</strong>
                                 </article>
                                 <article>
-                                    <span>Holder address</span>
-                                    <code>${escapeHtml(short(state.scenario.credential.holder, 18, 12))}</code>
-                                </article>
-                                <article>
-                                    <span>Credential id</span>
-                                    <code>${escapeHtml(short(state.scenario.credential.id, 18, 12))}</code>
-                                </article>
-                                <article>
-                                    <span>Claim count</span>
-                                    <strong>${state.scenario.credential.claimCount}</strong>
+                                    <span>Credential type</span>
+                                    <strong>${escapeHtml(state.scenario.credential.credentialType)}</strong>
                                 </article>
                                 <article>
                                     <span>Issued at</span>
                                     <strong>${escapeHtml(formatTimestamp(state.scenario.credential.issuedAt))}</strong>
                                 </article>
                                 <article>
-                                    <span>Expires at</span>
-                                    <strong>${escapeHtml(formatTimestamp(state.scenario.credential.expiresAt))}</strong>
+                                    <span>Total facts</span>
+                                    <strong>${state.scenario.credential.claimCount}</strong>
                                 </article>
                             </div>
-                            <div class="signature-stack">
-                                <div>
-                                    <span>Issuer signature</span>
-                                    <code>${escapeHtml(formatSignature(state.scenario.credential.signature))}</code>
-                                </div>
-                                <div>
-                                    <span>Holder signature</span>
-                                    <code>${escapeHtml(
-                                        state.scenario.presentation
-                                            ? formatSignature(state.scenario.presentation.presentationAuthorization.signature)
-                                            : "Awaiting exact policy match"
-                                    )}</code>
-                                </div>
-                                <div>
-                                    <span>Request digest</span>
-                                    <code>${escapeHtml(short(state.scenario.requestDigest, 20, 14))}</code>
-                                </div>
+                            <div class="toggle-row">
+                                ${renderToggle("showCredentialDetails", "Inspect credential details")}
                             </div>
+                            ${state.toggles.showCredentialDetails ? `
+                                <div class="meta-grid">
+                                    <article>
+                                        <span>Issuer signing address</span>
+                                        <code>${escapeHtml(short(state.scenario.credential.issuerSigningAddress, 18, 12))}</code>
+                                    </article>
+                                    <article>
+                                        <span>Holder address</span>
+                                        <code>${escapeHtml(short(state.scenario.credential.holder, 18, 12))}</code>
+                                    </article>
+                                    <article>
+                                        <span>Credential id</span>
+                                        <code>${escapeHtml(short(state.scenario.credential.id, 18, 12))}</code>
+                                    </article>
+                                    <article>
+                                        <span>Expires at</span>
+                                        <strong>${escapeHtml(formatTimestamp(state.scenario.credential.expiresAt))}</strong>
+                                    </article>
+                                </div>
+                                <div class="signature-stack">
+                                    <div>
+                                        <span>Issuer signature</span>
+                                        <code>${escapeHtml(formatSignature(state.scenario.credential.signature))}</code>
+                                    </div>
+                                    <div>
+                                        <span>Holder signature</span>
+                                        <code>${escapeHtml(
+                                            state.scenario.presentation
+                                                ? formatSignature(state.scenario.presentation.presentationAuthorization.signature)
+                                                : "Awaiting exact policy match"
+                                        )}</code>
+                                    </div>
+                                    <div>
+                                        <span>Request digest</span>
+                                        <code>${escapeHtml(short(state.scenario.requestDigest, 20, 14))}</code>
+                                    </div>
+                                </div>
+                            ` : ""}
                         </div>
                         <div class="story-panel">
                             <h3>Sample narrative</h3>
@@ -711,35 +925,25 @@ function render(): void {
                 <section class="section disclosure">
                     <div class="section-head">
                         <div>
-                            <p>Selective Disclosure</p>
-                            <h2>Exact policy matching, no over-sharing</h2>
+                            <p>Step 2 — Selective disclosure</p>
+                            <h2>Only these facts are revealed</h2>
+                            <p class="section-deck">The verifier asked for ${escapeHtml(requiredClaimLabels().join(", ").toLowerCase())}. Everything else stays hidden.</p>
                         </div>
-                        <span>Required claims vs hidden transcript material</span>
+                        <span>${disclosedCount} revealed · ${hiddenCount} hidden</span>
                     </div>
                     <div class="disclosure-layout">
                         <div class="policy-panel">
                             <div class="policy-tags">
-                                ${[...DEMO_REQUIRED_CLAIMS]
-                                    .map((key) => `<span>${escapeHtml(key)}</span>`)
+                                ${requiredClaimLabels()
+                                    .map((label) => `<span>${escapeHtml(label)}</span>`)
                                     .join("")}
                             </div>
                             ${renderPolicyWarnings()}
-                            <div class="policy-metrics">
-                                <article>
-                                    <span>Selected</span>
-                                    <strong>${disclosedCount}</strong>
-                                </article>
-                                <article>
-                                    <span>Hidden</span>
-                                    <strong>${hiddenCount}</strong>
-                                </article>
-                                <article>
-                                    <span>Policy</span>
-                                    <strong>${state.scenario.policy.exactMatch ? "Exact" : "Mismatch"}</strong>
-                                </article>
+                            <div class="toggle-row">
+                                ${renderToggle("showRawClaims", "Inspect raw claim data")}
                             </div>
                             <p class="support-text">
-                                V2 requires the disclosed set to match the verifier request exactly. Extra transcript fields are rejected, and missing required fields block presentation creation.
+                                The student must reveal exactly what the verifier requested — no extra transcript fields, and no missing required facts.
                             </p>
                         </div>
                         <div class="claim-column">
@@ -751,10 +955,11 @@ function render(): void {
                 <section class="section merkle">
                     <div class="section-head alt-head">
                         <div>
-                            <h2>Merkle proof inspection</h2>
-                            <p class="section-deck">Each revealed claim carries its own inclusion path back to the credential root.</p>
+                            <p>Step 3 — Cryptographic proof</p>
+                            <h2>Why hidden data still proves correctly</h2>
+                            <p class="section-deck">Revealed facts are mathematically linked to the full credential without exposing private transcript rows.</p>
                         </div>
-                        <span>${state.scenario.presentation?.disclosed.length ?? 0} disclosed leaves available</span>
+                        <span>${state.scenario.presentation?.disclosed.length ?? 0} revealed facts</span>
                     </div>
                     ${renderProofPanel()}
                 </section>
@@ -762,33 +967,36 @@ function render(): void {
                 <section class="section verification">
                     <div class="section-head alt-head">
                         <div>
-                            <h2>Verification checks</h2>
-                            <p class="section-deck">Issuer signature, holder authorization, audience binding, and policy validation stay tied to the actual cryptographic output.</p>
+                            <p>Step 4 — Verification</p>
+                            <h2>Does the proof check out?</h2>
+                            <p class="section-deck">The verifier confirms signatures, policy match, and that hidden transcript data was not revealed.</p>
                         </div>
-                        <span>${verificationPassed} checks currently passing</span>
+                        <span>${state.verification?.valid ? "Passed" : state.verificationRan ? "Failed" : "Not run yet"}</span>
                     </div>
                     <div class="verification-layout">
                         <div class="binding-panel">
                             <article>
-                                <span>Requested policy</span>
-                                <strong>${escapeHtml(DEMO_REQUIRED_CLAIMS.join(", "))}</strong>
+                                <span>Verifier requested</span>
+                                <strong>${escapeHtml(requiredClaimLabels().join(", "))}</strong>
                             </article>
                             <article>
                                 <span>Audience</span>
                                 <strong>${escapeHtml(DEMO_AUDIENCE)}</strong>
                             </article>
-                            <article>
-                                <span>Holder authorization digest</span>
-                                <code>${escapeHtml(
-                                    state.scenario.presentationAuthorizationDigest
-                                        ? short(state.scenario.presentationAuthorizationDigest, 20, 14)
-                                        : "Unavailable until disclosure matches policy"
-                                )}</code>
-                            </article>
-                            <article>
-                                <span>Verifier signing address</span>
-                                <code>${escapeHtml(short(DEMO_IDENTITIES.verifier.address, 18, 12))}</code>
-                            </article>
+                            ${state.toggles.showAdvancedVerification ? `
+                                <article>
+                                    <span>Holder authorization digest</span>
+                                    <code>${escapeHtml(
+                                        state.scenario.presentationAuthorizationDigest
+                                            ? short(state.scenario.presentationAuthorizationDigest, 20, 14)
+                                            : "Unavailable until disclosure matches policy"
+                                    )}</code>
+                                </article>
+                                <article>
+                                    <span>Verifier signing address</span>
+                                    <code>${escapeHtml(short(DEMO_IDENTITIES.verifier.address, 18, 12))}</code>
+                                </article>
+                            ` : ""}
                         </div>
                         <div class="verification-panel">
                             ${renderVerificationSummary()}
@@ -799,14 +1007,16 @@ function render(): void {
                 <section class="section chain">
                     <div class="section-head">
                         <div>
-                            <h2>Anchor comparison, status precedence, revocation bitmap, issuer inactivity</h2>
+                            <p>Step 5 — Blockchain registry</p>
+                            <h2>Blockchain status</h2>
+                            <p class="section-deck">The on-chain registry confirms the issuer is authorized and the credential has not been revoked.</p>
                         </div>
-                        <span>Primary path: app/src/core/v2 + app/src/chain/v2</span>
+                        <span>Live registry check</span>
                     </div>
                     ${renderChainPanel()}
                 </section>
 
-                <section class="section privacy">
+                <section class="section privacy section-spaced">
                     <div class="section-head alt-head">
                         <div>
                             <h2>Privacy boundary</h2>
@@ -891,6 +1101,15 @@ function bindEvents(root: HTMLElement): void {
             void handleAction(action);
         });
     });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-toggle]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const key = button.dataset.toggle as keyof UiToggles | undefined;
+            if (!key || !(key in state.toggles)) return;
+            state.toggles[key] = !state.toggles[key];
+            render();
+        });
+    });
 }
 
 async function handleAction(action: string): Promise<void> {
@@ -898,7 +1117,7 @@ async function handleAction(action: string): Promise<void> {
         if (action === "issue") {
             synchronizeScenario(true);
             await runVerification();
-            setNotice("ok", "A fresh V2 credential was issued locally with the same academic story and new timestamps.");
+            setNotice("ok", "A fresh credential was issued with updated timestamps.");
             render();
             return;
         }
@@ -907,7 +1126,7 @@ async function handleAction(action: string): Promise<void> {
             state.selectedClaims = new Set(DEMO_REQUIRED_CLAIMS);
             synchronizeScenario();
             await runVerification();
-            setNotice("ok", "Disclosure reset to the exact verifier-required claim set.");
+            setNotice("ok", "Revealed facts reset to the three required by the verifier.");
             render();
             return;
         }
@@ -916,16 +1135,16 @@ async function handleAction(action: string): Promise<void> {
             if (!state.scenario.presentation) {
                 throw new Error(state.scenario.presentationError ?? "The disclosure must exactly match the verifier policy before verification can run.");
             }
-            setBusy(action, "Running V2 verification checks across structure, signatures, policy, and Merkle proofs...");
+            setBusy(action, "Verifying signatures, policy match, and cryptographic proofs...");
             await runVerification();
-            setNotice(state.verification?.valid ? "ok" : "bad", "V2 verification completed.");
+            setNotice(state.verification?.valid ? "ok" : "bad", state.verification?.valid ? "Verification passed." : "Verification failed.");
             return;
         }
 
         ensureChainConfigured();
 
         const labels: Record<string, string> = {
-            "refresh-chain": "Reading V2 organization state, anchor status, and revocation bitmap...",
+            "refresh-chain": "Reading blockchain registry status...",
             "register-org": "Registering the demo university on the V2 issuer registry...",
             anchor: "Anchoring the V2 credential with the issuer signing key...",
             revoke: "Revoking the anchored credential in the organization bitmap...",
@@ -936,7 +1155,7 @@ async function handleAction(action: string): Promise<void> {
 
         if (action === "refresh-chain") {
             await refreshChainSnapshot();
-            setNotice("ok", "Live V2 chain state refreshed.");
+            setNotice("ok", "Blockchain status refreshed.");
             return;
         }
 
