@@ -4,192 +4,219 @@ pragma solidity ^0.8.24;
 import {ICredentialRegistryV2} from "./ICredentialRegistryV2.sol";
 import {IIssuerRegistryV2} from "./IIssuerRegistryV2.sol";
 
-/// @title CredentialRegistryV2
-/// @notice Anchors Protocol V2 academic credentials on-chain and provides bitmap-based revocation.
-/// @dev    Key design decisions:
-///
-///         SIGNER-SCOPED ANCHORING
-///           `msg.sender` is recorded as the signer at anchor time. Only that exact address
-///           (or the organization's current controller) may later revoke the credential.
-///           A different authorized key of the same organization cannot replace or modify
-///           an existing anchor — preventing one authorized signer from poisoning another's work.
-///
-///         BITMAP REVOCATION
-///           A global sequential counter (`_nextRevocationIndex`) assigns each anchored
-///           credential a unique index. Revocation sets a single bit in a packed
-///           `mapping(uint256 slot => uint256 bitmask)`. This enables:
-///             - O(1) revoke and lookup.
-///             - Off-chain revocation lists (consumers iterate indices, not credential IDs).
-///             - Same gas cost whether it is the first or last credential in a slot.
-///
-///         NO PII ON-CHAIN
-///           Only `credentialDigest` (EIP-712 hash) and `holderCommitment`
-///           (keccak256 of holder address) are stored. No claim keys, values, or
-///           holder addresses appear in storage or events.
-///
-///         SECURITY INVARIANTS
-///           - No `tx.origin`.
-///           - No assembly, delegatecall, selfdestruct, or unchecked arithmetic.
-///           - Checks-effects-interactions ordering: all state writes precede any external reads
-///             that could trigger re-entrance (view-only calls on `issuerRegistry` are safe).
 contract CredentialRegistryV2 is ICredentialRegistryV2 {
-    // ─────────────────────────── State ──────────────────────────────────────
-
     IIssuerRegistryV2 public immutable issuerRegistry;
 
-    mapping(bytes32 => AnchorV2) private _anchors;
+    mapping(bytes32 anchorKey => CredentialAnchor) private _anchors;
+    mapping(bytes32 organizationId => uint64) private _nextRevocationIndex;
+    mapping(bytes32 organizationId => mapping(uint256 wordIndex => uint256 bitmap)) private
+        _revocationBitmap;
 
-    /// @dev Global sequential revocation index. Starts at 0; incremented per anchor.
-    uint256 private _nextRevocationIndex;
-
-    /// @dev Bitmap revocation storage.
-    ///      slot   = revocationIndex / 256
-    ///      bitPos = revocationIndex % 256
-    ///      A bit set to 1 means that credential is revoked.
-    mapping(uint256 => uint256) private _revocationBitmap;
-
-    // ─────────────────────────── Errors ─────────────────────────────────────
-
-    error NotAuthorizedSigner(address caller, bytes32 orgId);
-    error OrgNotFound(bytes32 orgId);
-    error CredentialAlreadyAnchored(bytes32 credentialId);
-    error CredentialNotFound(bytes32 credentialId);
-    error AlreadyRevoked(bytes32 credentialId);
-    error CallerNotAuthorized(address caller);
-    error InvalidExpiry(uint64 issuedAt, uint64 expiresAt);
+    error ZeroOrganizationId();
     error ZeroCredentialId();
     error ZeroCredentialDigest();
     error ZeroHolderCommitment();
-    error ZeroOrgId();
+    error ZeroMerkleRoot();
+    error ZeroIssuerSigningAddress();
+    error ZeroRegistryAddress();
+    error InvalidClaimCount(uint32 claimCount);
+    error InvalidExpiry(uint64 issuedAt, uint64 expiresAt);
+    error InvalidIssuedAt(uint64 issuedAt, uint64 blockTimestamp);
+    error OrganizationInactive(bytes32 organizationId);
+    error UnauthorizedSigningKey(bytes32 organizationId, address caller);
+    error SigningKeyNotAuthorizedAtIssuedAt(
+        bytes32 organizationId, address caller, uint64 issuedAt
+    );
+    error AnchorAlreadyExists(bytes32 anchorKey);
+    error AnchorNotFound(bytes32 anchorKey);
+    error UnauthorizedRevoker(bytes32 organizationId, address caller);
+    error CredentialAlreadyRevoked(bytes32 anchorKey);
 
-    // ─────────────────────────────────────────────────────────────────────────
-
-    constructor(IIssuerRegistryV2 _issuerRegistry) {
-        issuerRegistry = _issuerRegistry;
+    constructor(IIssuerRegistryV2 registry) {
+        if (address(registry) == address(0)) revert ZeroRegistryAddress();
+        issuerRegistry = registry;
     }
 
-    // ──────────────────────── Signer Mutations ──────────────────────────────
-
-    /// @inheritdoc ICredentialRegistryV2
-    function anchorCredentialV2(
+    function anchorCredential(
+        bytes32 organizationId,
         bytes32 credentialId,
-        bytes32 orgId,
         bytes32 credentialDigest,
         bytes32 holderCommitment,
+        bytes32 merkleRoot,
         uint64 issuedAt,
-        uint64 expiresAt
-    ) external override {
-        // ── Checks ──────────────────────────────────────────────────────────
+        uint64 expiresAt,
+        uint32 claimCount
+    ) external {
+        if (organizationId == bytes32(0)) revert ZeroOrganizationId();
         if (credentialId == bytes32(0)) revert ZeroCredentialId();
-        if (orgId == bytes32(0)) revert ZeroOrgId();
         if (credentialDigest == bytes32(0)) revert ZeroCredentialDigest();
         if (holderCommitment == bytes32(0)) revert ZeroHolderCommitment();
-        if (_anchors[credentialId].exists) revert CredentialAlreadyAnchored(credentialId);
+        if (merkleRoot == bytes32(0)) revert ZeroMerkleRoot();
+        if (claimCount == 0 || claimCount > 256) revert InvalidClaimCount(claimCount);
+        if (issuedAt > uint64(block.timestamp) + 60) {
+            revert InvalidIssuedAt(issuedAt, uint64(block.timestamp));
+        }
         if (expiresAt != 0 && expiresAt <= issuedAt) revert InvalidExpiry(issuedAt, expiresAt);
-
-        // Verify that msg.sender is an authorized signing key for orgId right now.
-        // wasAuthorizedAt uses block.timestamp which is safe (view-only external call).
-        if (!issuerRegistry.wasAuthorizedAt(orgId, msg.sender, uint64(block.timestamp))) {
-            revert NotAuthorizedSigner(msg.sender, orgId);
+        if (!issuerRegistry.isOrganizationActive(organizationId)) {
+            revert OrganizationInactive(organizationId);
+        }
+        if (!issuerRegistry.isCurrentlyAuthorizedKey(organizationId, msg.sender)) {
+            revert UnauthorizedSigningKey(organizationId, msg.sender);
+        }
+        if (!issuerRegistry.wasAuthorizedKeyAt(organizationId, msg.sender, issuedAt)) {
+            revert SigningKeyNotAuthorizedAtIssuedAt(organizationId, msg.sender, issuedAt);
         }
 
-        // ── Effects ─────────────────────────────────────────────────────────
-        uint256 revIdx = _nextRevocationIndex;
-        _nextRevocationIndex = revIdx + 1;
+        bytes32 anchorKey = computeAnchorKey(organizationId, msg.sender, credentialId);
+        if (_anchors[anchorKey].exists) revert AnchorAlreadyExists(anchorKey);
 
-        _anchors[credentialId] = AnchorV2({
-            orgId: orgId,
-            signer: msg.sender,
+        uint64 revocationIndex = _nextRevocationIndex[organizationId];
+        _nextRevocationIndex[organizationId] = revocationIndex + 1;
+
+        _anchors[anchorKey] = CredentialAnchor({
             credentialDigest: credentialDigest,
+            merkleRoot: merkleRoot,
             holderCommitment: holderCommitment,
+            organizationId: organizationId,
+            issuerSigningAddress: msg.sender,
             issuedAt: issuedAt,
             expiresAt: expiresAt,
-            anchoredAt: uint64(block.timestamp),
-            revocationIndex: revIdx,
+            revocationIndex: revocationIndex,
+            claimCount: claimCount,
             exists: true
         });
 
-        emit CredentialAnchoredV2(
-            credentialId,
-            orgId,
+        emit CredentialAnchored(
+            anchorKey,
+            organizationId,
             msg.sender,
+            credentialId,
             credentialDigest,
             holderCommitment,
+            merkleRoot,
             issuedAt,
             expiresAt,
-            revIdx
+            revocationIndex,
+            claimCount
         );
     }
 
-    /// @inheritdoc ICredentialRegistryV2
-    function revokeCredentialV2(bytes32 credentialId) external override {
-        // ── Checks ──────────────────────────────────────────────────────────
-        AnchorV2 storage anchor = _anchors[credentialId];
-        if (!anchor.exists) revert CredentialNotFound(credentialId);
-
-        // Only the original signer or the organization's current controller may revoke.
-        // We read controller via an external view call before writing state (safe: no side effects).
-        IIssuerRegistryV2.Organization memory org = issuerRegistry.getOrganization(anchor.orgId);
-        bool isOriginalSigner = msg.sender == anchor.signer;
-        bool isController = msg.sender == org.controller;
-        if (!isOriginalSigner && !isController) revert CallerNotAuthorized(msg.sender);
-
-        uint256 revIdx = anchor.revocationIndex;
-        if (_isBitSet(revIdx)) revert AlreadyRevoked(credentialId);
-
-        // ── Effects ─────────────────────────────────────────────────────────
-        _setBit(revIdx);
-
-        emit CredentialRevokedV2(credentialId, anchor.orgId, msg.sender, revIdx);
-    }
-
-    // ──────────────────────────── Views ─────────────────────────────────────
-
-    /// @inheritdoc ICredentialRegistryV2
-    function statusOfV2(bytes32 credentialId) external view override returns (StatusV2) {
-        AnchorV2 storage anchor = _anchors[credentialId];
-        if (!anchor.exists) return StatusV2.Unknown;
-        if (_isBitSet(anchor.revocationIndex)) return StatusV2.Revoked;
-        if (anchor.expiresAt != 0 && uint64(block.timestamp) >= anchor.expiresAt) {
-            return StatusV2.Expired;
+    function revokeCredential(
+        bytes32 organizationId,
+        address issuerSigningAddress,
+        bytes32 credentialId,
+        bytes32 reasonHash
+    ) external {
+        if (issuerSigningAddress == address(0)) {
+            revert ZeroIssuerSigningAddress();
         }
-        return StatusV2.Valid;
+        bytes32 anchorKey = computeAnchorKey(organizationId, issuerSigningAddress, credentialId);
+        CredentialAnchor storage anchor = _anchors[anchorKey];
+        if (!anchor.exists) revert AnchorNotFound(anchorKey);
+
+        bool isController = issuerRegistry.isOrganizationController(organizationId, msg.sender);
+        bool isCurrentKey = issuerRegistry.isCurrentlyAuthorizedKey(organizationId, msg.sender);
+        if (!isController && !isCurrentKey) revert UnauthorizedRevoker(organizationId, msg.sender);
+
+        (uint256 wordIndex, uint256 mask) = _bitmapPosition(anchor.revocationIndex);
+        if ((_revocationBitmap[organizationId][wordIndex] & mask) != 0) {
+            revert CredentialAlreadyRevoked(anchorKey);
+        }
+
+        _revocationBitmap[organizationId][wordIndex] |= mask;
+
+        emit CredentialRevoked(
+            anchorKey, organizationId, msg.sender, credentialId, anchor.revocationIndex, reasonHash
+        );
     }
 
-    /// @inheritdoc ICredentialRegistryV2
-    function getAnchorV2(bytes32 credentialId) external view override returns (AnchorV2 memory) {
-        AnchorV2 storage anchor = _anchors[credentialId];
-        if (!anchor.exists) revert CredentialNotFound(credentialId);
+    function isRevoked(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId)
+        public
+        view
+        returns (bool)
+    {
+        if (issuerSigningAddress == address(0)) return false;
+        bytes32 anchorKey = computeAnchorKey(organizationId, issuerSigningAddress, credentialId);
+        CredentialAnchor storage anchor = _anchors[anchorKey];
+        if (!anchor.exists) return false;
+        (uint256 wordIndex, uint256 mask) = _bitmapPosition(anchor.revocationIndex);
+        return (_revocationBitmap[organizationId][wordIndex] & mask) != 0;
+    }
+
+    function revocationWord(bytes32 organizationId, uint256 wordIndex)
+        external
+        view
+        returns (uint256)
+    {
+        return _revocationBitmap[organizationId][wordIndex];
+    }
+
+    function getAnchor(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId)
+        external
+        view
+        returns (CredentialAnchor memory)
+    {
+        bytes32 anchorKey = computeAnchorKey(organizationId, issuerSigningAddress, credentialId);
+        CredentialAnchor memory anchor = _anchors[anchorKey];
+        if (!anchor.exists) revert AnchorNotFound(anchorKey);
         return anchor;
     }
 
-    /// @inheritdoc ICredentialRegistryV2
-    function isCurrentlyValidV2(bytes32 credentialId) external view override returns (bool) {
-        AnchorV2 storage anchor = _anchors[credentialId];
-        if (!anchor.exists) return false;
-        if (_isBitSet(anchor.revocationIndex)) return false;
-        if (anchor.expiresAt != 0 && uint64(block.timestamp) >= anchor.expiresAt) return false;
-        return issuerRegistry.isOrganizationActive(anchor.orgId);
+    function statusOf(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId)
+        public
+        view
+        returns (Status)
+    {
+        if (issuerSigningAddress == address(0)) return Status.Unknown;
+        bytes32 anchorKey = computeAnchorKey(organizationId, issuerSigningAddress, credentialId);
+        CredentialAnchor storage anchor = _anchors[anchorKey];
+        if (!anchor.exists) return Status.Unknown;
+        if (isRevoked(organizationId, issuerSigningAddress, credentialId)) return Status.Revoked;
+        if (anchor.expiresAt != 0 && uint64(block.timestamp) >= anchor.expiresAt) {
+            return Status.Expired;
+        }
+        if (!issuerRegistry.isOrganizationActive(organizationId)) return Status.IssuerInactive;
+        return Status.Valid;
     }
 
-    /// @inheritdoc ICredentialRegistryV2
-    function isRevokedByIndex(uint256 revocationIndex) external view override returns (bool) {
-        return _isBitSet(revocationIndex);
+    function isCurrentlyValid(
+        bytes32 organizationId,
+        address issuerSigningAddress,
+        bytes32 credentialId
+    ) external view returns (bool) {
+        return statusOf(organizationId, issuerSigningAddress, credentialId) == Status.Valid;
     }
 
-    // ──────────────────────── Bitmap Helpers ────────────────────────────────
-
-    /// @dev Returns true if the bit at `index` is set in the revocation bitmap.
-    function _isBitSet(uint256 index) internal view returns (bool) {
-        uint256 slot = index / 256;
-        uint256 bitPos = index % 256;
-        return (_revocationBitmap[slot] >> bitPos) & uint256(1) == 1;
+    function computeAnchorKey(
+        bytes32 organizationId,
+        address issuerSigningAddress,
+        bytes32 credentialId
+    ) public pure returns (bytes32) {
+        return keccak256(abi.encode(organizationId, issuerSigningAddress, credentialId));
     }
 
-    /// @dev Sets the bit at `index` in the revocation bitmap.
-    function _setBit(uint256 index) internal {
-        uint256 slot = index / 256;
-        uint256 bitPos = index % 256;
-        _revocationBitmap[slot] |= (uint256(1) << bitPos);
+    function computeHolderCommitment(
+        bytes32 organizationId,
+        address issuerSigningAddress,
+        bytes32 credentialId,
+        address holderAddress
+    ) public pure returns (bytes32) {
+        return keccak256(
+            abi.encode(organizationId, issuerSigningAddress, credentialId, holderAddress)
+        );
+    }
+
+    function nextRevocationIndex(bytes32 organizationId) external view returns (uint64) {
+        return _nextRevocationIndex[organizationId];
+    }
+
+    function _bitmapPosition(uint64 revocationIndex)
+        internal
+        pure
+        returns (uint256 wordIndex, uint256 mask)
+    {
+        wordIndex = uint256(revocationIndex >> 8);
+        uint256 bitIndex = uint256(revocationIndex & 255);
+        mask = uint256(1) << bitIndex;
     }
 }

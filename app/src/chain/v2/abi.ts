@@ -1,63 +1,47 @@
-/**
- * Hand-curated ABIs for IssuerRegistryV2 and CredentialRegistryV2.
- * Keep these in sync with:
- *   contracts/src/IssuerRegistryV2.sol
- *   contracts/src/CredentialRegistryV2.sol
- *
- * V2 uses bytes32 organizationId instead of address-based issuers (V1).
- */
-
 export const issuerRegistryV2Abi = [
-    // Owner-only mutations
-    "function registerOrganization(bytes32 orgId, address controller, address initialKey, uint64 keyValidFrom, string name, string metadataURI)",
-    "function suspendOrganization(bytes32 orgId, string reason)",
-    "function reinstateOrganization(bytes32 orgId, address initialKey, uint64 keyValidFrom)",
-    // Controller-only mutations
-    "function updateOrganization(bytes32 orgId, string name, string metadataURI)",
-    "function proposeControllerTransfer(bytes32 orgId, address newController)",
-    "function acceptControllerTransfer(bytes32 orgId)",
-    "function addSigningKey(bytes32 orgId, address key, uint64 validFrom)",
-    // Controller or owner
-    "function revokeSigningKey(bytes32 orgId, address key)",
-    // Views
-    "function organizationExists(bytes32 orgId) view returns (bool)",
-    "function isOrganizationActive(bytes32 orgId) view returns (bool)",
-    "function wasAuthorizedAt(bytes32 orgId, address key, uint64 at) view returns (bool)",
-    "function getOrganization(bytes32 orgId) view returns (tuple(address controller, address pendingController, string name, string metadataURI, uint64 registeredAt, uint64 suspendedAt, uint32 currentEpoch, bool active))",
-    "function getSigningKey(address key) view returns (tuple(bytes32 organizationId, uint32 epoch, uint64 validFrom, uint64 validUntil, bool exists))",
-    "function owner() view returns (address)",
-    // Events
-    "event OrganizationRegistered(bytes32 indexed orgId, address indexed controller, address indexed initialKey, string name)",
-    "event OrganizationUpdated(bytes32 indexed orgId, string name, string metadataURI)",
-    "event OrganizationSuspended(bytes32 indexed orgId, string reason)",
-    "event OrganizationReinstated(bytes32 indexed orgId, uint32 newEpoch, address initialKey)",
-    "event ControllerTransferProposed(bytes32 indexed orgId, address indexed proposedController)",
-    "event ControllerTransferred(bytes32 indexed orgId, address indexed newController)",
-    "event SigningKeyAdded(bytes32 indexed orgId, address indexed key, uint32 epoch, uint64 validFrom)",
-    "event SigningKeyRevoked(bytes32 indexed orgId, address indexed key, uint64 validUntil)",
+    "function registerOrganization(bytes32 organizationId, address controller, string name, string metadataURI, address initialSigningKey, uint64 initialValidFrom)",
+    "function updateOrganization(bytes32 organizationId, string name, string metadataURI)",
+    "function proposeControllerTransfer(bytes32 organizationId, address newController)",
+    "function acceptControllerTransfer(bytes32 organizationId)",
+    "function addSigningKey(bytes32 organizationId, address signingKey, uint64 validFrom)",
+    "function revokeSigningKey(bytes32 organizationId, address signingKey)",
+    "function suspendOrganization(bytes32 organizationId)",
+    "function reinstateOrganization(bytes32 organizationId, address initialSigningKey, uint64 initialValidFrom)",
+    "function organizationExists(bytes32 organizationId) view returns (bool)",
+    "function isOrganizationActive(bytes32 organizationId) view returns (bool)",
+    "function isOrganizationController(bytes32 organizationId, address account) view returns (bool)",
+    "function getOrganization(bytes32 organizationId) view returns (tuple(address controller, address pendingController, string name, string metadataURI, uint64 registeredAt, uint64 suspendedAt, uint32 currentEpoch, bool active))",
+    "function getSigningKey(address signingKey) view returns (tuple(bytes32 organizationId, uint32 epoch, uint64 validFrom, uint64 validUntil, bool exists))",
+    "function isCurrentlyAuthorizedKey(bytes32 organizationId, address signingKey) view returns (bool)",
+    "function wasAuthorizedKeyAt(bytes32 organizationId, address signingKey, uint64 timestamp) view returns (bool)",
+    "function organizationCount() view returns (uint256)",
+    "function organizationIdAt(uint256 index) view returns (bytes32)",
+    "function signingKeyCount(bytes32 organizationId) view returns (uint256)",
+    "function signingKeyAt(bytes32 organizationId, uint256 index) view returns (address)",
+    "function epochEndedAt(bytes32 organizationId, uint32 epoch) view returns (uint64)",
+    "function owner() view returns (address)"
 ] as const;
 
 export const credentialRegistryV2Abi = [
-    // Signer mutations
-    "function anchorCredentialV2(bytes32 credentialId, bytes32 orgId, bytes32 credentialDigest, bytes32 holderCommitment, uint64 issuedAt, uint64 expiresAt)",
-    "function revokeCredentialV2(bytes32 credentialId)",
-    // Views
-    "function statusOfV2(bytes32 credentialId) view returns (uint8)",
-    "function getAnchorV2(bytes32 credentialId) view returns (tuple(bytes32 orgId, address signer, bytes32 credentialDigest, bytes32 holderCommitment, uint64 issuedAt, uint64 expiresAt, uint64 anchoredAt, uint256 revocationIndex, bool exists))",
-    "function isCurrentlyValidV2(bytes32 credentialId) view returns (bool)",
-    "function isRevokedByIndex(uint256 revocationIndex) view returns (bool)",
-    "function issuerRegistry() view returns (address)",
-    // Events
-    "event CredentialAnchoredV2(bytes32 indexed credentialId, bytes32 indexed orgId, address indexed signer, bytes32 credentialDigest, bytes32 holderCommitment, uint64 issuedAt, uint64 expiresAt, uint256 revocationIndex)",
-    "event CredentialRevokedV2(bytes32 indexed credentialId, bytes32 indexed orgId, address indexed revoker, uint256 revocationIndex)",
+    "function anchorCredential(bytes32 organizationId, bytes32 credentialId, bytes32 credentialDigest, bytes32 holderCommitment, bytes32 merkleRoot, uint64 issuedAt, uint64 expiresAt, uint32 claimCount)",
+    "function revokeCredential(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId, bytes32 reasonHash)",
+    "function isRevoked(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId) view returns (bool)",
+    "function revocationWord(bytes32 organizationId, uint256 wordIndex) view returns (uint256)",
+    "function getAnchor(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId) view returns (tuple(bytes32 credentialDigest, bytes32 merkleRoot, bytes32 holderCommitment, bytes32 organizationId, address issuerSigningAddress, uint64 issuedAt, uint64 expiresAt, uint64 revocationIndex, uint32 claimCount, bool exists))",
+    "function statusOf(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId) view returns (uint8)",
+    "function isCurrentlyValid(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId) view returns (bool)",
+    "function computeAnchorKey(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId) pure returns (bytes32)",
+    "function computeHolderCommitment(bytes32 organizationId, address issuerSigningAddress, bytes32 credentialId, address holderAddress) pure returns (bytes32)",
+    "function nextRevocationIndex(bytes32 organizationId) view returns (uint64)",
+    "function issuerRegistry() view returns (address)"
 ] as const;
 
-/** StatusV2 enum from CredentialRegistryV2.StatusV2 (must match Solidity ordering). */
 export const StatusV2Enum = {
     Unknown: 0,
     Valid: 1,
     Revoked: 2,
     Expired: 3,
+    IssuerInactive: 4
 } as const;
 
 export type StatusV2 = (typeof StatusV2Enum)[keyof typeof StatusV2Enum];
