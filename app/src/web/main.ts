@@ -11,6 +11,14 @@ import {
 import type {AnchorComparisonResult, AnchorStatusNameV2} from "../chain/v2/types.js";
 import {ChainClientV2, compareAnchorToCredentialV2} from "../chain/v2/index.js";
 import {
+    DEFAULT_CHAIN_INPUTS,
+    getProductModeLabel,
+    loadGeneratedChainInputs,
+    pickChainInputs,
+    resolveChainInputs,
+    type ChainInputs
+} from "./chainConfig.js";
+import {
     DEMO_AUDIENCE,
     DEMO_IDENTITIES,
     DEMO_ORGANIZATION,
@@ -22,20 +30,23 @@ import {
     type DemoScenario
 } from "../util/v2Demo.js";
 import {
-    claimLabel,
+    DEMO_STEPS,
+    type DemoStepId,
+    getDemoStepIndex,
+    getDemoStepStatus,
+    getWorkspaceMeta
+} from "./demoSteps.js";
+import {getActionLabel, planAction} from "./actionFlow.js";
+import {DEFAULT_UI_TOGGLES, type UiToggles} from "./uiState.js";
+import {
     DEMO_STORY_CARDS,
+    claimLabel,
     formatClaimReadableValue,
     formatHiddenSummary,
     formatRevealedSummary,
     groupVerificationChecks,
     requiredClaimLabels
 } from "../util/webUi.js";
-
-interface ChainInputs {
-    rpcUrl: string;
-    issuerRegistryV2: string;
-    credentialRegistryV2: string;
-}
 
 interface ChainSnapshot {
     organizationRegistered: boolean;
@@ -60,16 +71,8 @@ interface AppNotice {
     text: string;
 }
 
-interface UiToggles {
-    showHeroTechnical: boolean;
-    showCredentialDetails: boolean;
-    showRawClaims: boolean;
-    showAdvancedVerification: boolean;
-    showMerkleInternals: boolean;
-    showAdvancedChain: boolean;
-}
-
 interface AppState {
+    activeStep: DemoStepId;
     selectedClaims: Set<string>;
     scenario: DemoScenario;
     verification?: VerificationResultV2;
@@ -84,31 +87,39 @@ interface AppState {
 }
 
 const CHAIN_STORAGE_KEY = "credential-dapp-v2-chain";
-const storedChain = JSON.parse(localStorage.getItem(CHAIN_STORAGE_KEY) ?? "{}") as Partial<ChainInputs>;
+const storedChain = pickChainInputs(
+    JSON.parse(localStorage.getItem(CHAIN_STORAGE_KEY) ?? "{}") as Partial<ChainInputs>
+);
 
 const state: AppState = {
+    activeStep: "overview",
     selectedClaims: new Set(DEMO_REQUIRED_CLAIMS),
     scenario: createDemoScenario(DEMO_REQUIRED_CLAIMS),
     verificationRan: false,
     chainInputs: {
-        rpcUrl: storedChain.rpcUrl ?? "http://127.0.0.1:8545",
-        issuerRegistryV2: storedChain.issuerRegistryV2 ?? "",
-        credentialRegistryV2: storedChain.credentialRegistryV2 ?? ""
+        ...DEFAULT_CHAIN_INPUTS,
+        ...storedChain
     },
     proofFocusKey: DEMO_REQUIRED_CLAIMS[0],
-    toggles: {
-        showHeroTechnical: false,
-        showCredentialDetails: false,
-        showRawClaims: false,
-        showAdvancedVerification: false,
-        showMerkleInternals: false,
-        showAdvancedChain: false
-    }
+    toggles: {...DEFAULT_UI_TOGGLES}
 };
 
 void primeDemo();
 
 async function primeDemo(): Promise<void> {
+    const queryInputs = pickChainInputs({
+        rpcUrl: new URLSearchParams(window.location.search).get("rpcUrl") ?? undefined,
+        issuerRegistryV2: new URLSearchParams(window.location.search).get("issuerRegistryV2") ?? undefined,
+        credentialRegistryV2: new URLSearchParams(window.location.search).get("credentialRegistryV2") ?? undefined
+    });
+    const generatedInputs = await loadGeneratedChainInputs();
+    const resolved = resolveChainInputs({
+        query: queryInputs,
+        stored: storedChain,
+        generated: generatedInputs
+    });
+
+    state.chainInputs = resolved.inputs;
     await runVerification();
     render();
 }
@@ -179,6 +190,21 @@ function setBusy(action?: string, label?: string): void {
 
 function setNotice(kind: AppNotice["kind"], text: string): void {
     state.notice = {kind, text};
+}
+
+function setActiveStep(step: DemoStepId): void {
+    state.activeStep = step;
+}
+
+function resetDemo(): void {
+    state.activeStep = "overview";
+    state.selectedClaims = new Set(DEMO_REQUIRED_CLAIMS);
+    state.proofFocusKey = DEMO_REQUIRED_CLAIMS[0];
+    state.toggles = {...DEFAULT_UI_TOGGLES};
+    state.notice = undefined;
+    state.busyAction = undefined;
+    state.busyLabel = undefined;
+    synchronizeScenario(true);
 }
 
 function saveChainInputs(): void {
@@ -281,18 +307,77 @@ async function refreshChainSnapshot(txHash?: string): Promise<void> {
     state.chainSnapshot = snapshot;
 }
 
-function buttonLabel(action: string): string {
-    const labels: Record<string, string> = {
-        issue: "Issue credential",
-        "match-policy": "Reveal required facts",
-        verify: "Verify proof",
-        "refresh-chain": "Refresh blockchain status",
-        "register-org": "Register organization",
-        anchor: "Anchor credential",
-        revoke: "Revoke credential",
-        suspend: "Suspend issuer"
-    };
-    return labels[action] ?? action;
+function renderWorkspaceNav(): string {
+    return `
+        <nav class="workspace-nav" aria-label="Product areas">
+            ${DEMO_STEPS.map((step) => {
+                const status = getDemoStepStatus(state.activeStep, step.id);
+                return `
+                    <button
+                        type="button"
+                        class="workspace-nav-item ${status}"
+                        data-step-id="${step.id}"
+                        aria-current="${status === "current" ? "page" : "false"}"
+                    >
+                        <strong>${escapeHtml(step.label)}</strong>
+                    </button>
+                `;
+            }).join("")}
+        </nav>
+    `;
+}
+
+function renderStepShell(): string {
+    const activeStep = getWorkspaceMeta(state.activeStep);
+    const modeLabel = getProductModeLabel(state.chainInputs);
+
+    return `
+        <header class="hero product-shell">
+            <div class="hero-copy">
+                <p class="eyebrow">CredentialTrust</p>
+                <h1>Credential operations console</h1>
+                <p class="hero-text demo-shell-text">
+                    ${escapeHtml(activeStep.description)}
+                </p>
+                <div class="hero-actions">
+                    ${state.activeStep === "overview"
+                        ? `<span class="sample-badge">${escapeHtml(modeLabel)}</span>`
+                        : renderButton(getActionForStep(state.activeStep), {variant: "primary"})}
+                    ${state.activeStep === "overview" ? "" : `<span class="sample-badge">${escapeHtml(modeLabel)}</span>`}
+                </div>
+            </div>
+            <aside class="hero-rail product-shell-rail">
+                <div class="metric-block">
+                    <span>You are</span>
+                    <strong>${escapeHtml(activeStep.roleLabel)}</strong>
+                    <p class="hero-note">${escapeHtml(activeStep.title)}</p>
+                </div>
+                <div class="metric-block metric-block-light">
+                    <span>Primary action</span>
+                    <strong>${escapeHtml(activeStep.actionLabel)}</strong>
+                    <p class="hero-note">${escapeHtml(activeStep.resultLabel)}</p>
+                </div>
+                ${renderWorkspaceNav()}
+            </aside>
+        </header>
+    `;
+}
+
+function getActionForStep(step: DemoStepId): string {
+    switch (step) {
+        case "overview":
+            return "start-demo";
+        case "issue":
+            return "issue";
+        case "reveal":
+            return "reveal";
+        case "verify":
+            return "verify";
+        case "blockchain":
+            return isChainConfigured() ? "refresh-chain" : "set-up-chain";
+        case "privacy":
+            return "restart-demo";
+    }
 }
 
 function renderToggle(
@@ -333,8 +418,28 @@ function renderButton(
             ${disabled ? "disabled" : ""}
             aria-busy="${loading ? "true" : "false"}"
         >
-            <span class="button-face">${escapeHtml(loading ? `${buttonLabel(action)}...` : buttonLabel(action))}</span>
+            <span class="button-face">${escapeHtml(loading ? `${getActionLabel(action)}...` : getActionLabel(action))}</span>
         </button>
+    `;
+}
+
+function renderActionCard(
+    title: string,
+    description: string,
+    action: string,
+    options: {variant?: "primary" | "secondary" | "ghost" | "danger"; badge?: string; disabled?: boolean} = {}
+): string {
+    return `
+        <article class="action-card">
+            <div class="action-card-copy">
+                ${options.badge ? `<span class="action-card-badge">${escapeHtml(options.badge)}</span>` : ""}
+                <strong>${escapeHtml(title)}</strong>
+                <p>${escapeHtml(description)}</p>
+            </div>
+            <div class="action-card-foot">
+                ${renderButton(action, {variant: options.variant ?? "secondary", disabled: options.disabled})}
+            </div>
+        </article>
     `;
 }
 
@@ -342,8 +447,8 @@ function renderVerificationSummary(): string {
     if (!state.scenario.presentation) {
         return `
             <div class="empty-state">
-                <strong>Cannot verify yet</strong>
-                <p>${escapeHtml(state.scenario.presentationError ?? "Reveal exactly the three facts the verifier asked for, then run verification.")}</p>
+                <strong>No proof prepared yet</strong>
+                <p>${escapeHtml(state.scenario.presentationError ?? "Share proof from the wallet, then verify it here.")}</p>
             </div>
         `;
     }
@@ -352,7 +457,7 @@ function renderVerificationSummary(): string {
         return `
             <div class="empty-state">
                 <strong>Ready to verify</strong>
-                <p>The student has revealed only the required facts. Click Verify proof to confirm everything checks out.</p>
+                <p>Click Verify proof to check the submitted proof.</p>
             </div>
         `;
     }
@@ -364,11 +469,11 @@ function renderVerificationSummary(): string {
         <div class="verification-board ${verdictClass}">
             <div class="verification-verdict">
                 <span>Result</span>
-                <strong>${state.verification.valid ? "Verification passed" : "Verification failed"}</strong>
+                <strong>${state.verification.valid ? "Accepted" : "Rejected"}</strong>
                 <p class="verdict-summary">
                     ${state.verification.valid
-                        ? "The proof is valid, the issuer signature is trusted, and hidden transcript data was not revealed."
-                        : "One or more checks failed. Open the advanced verification log to see which step did not pass."}
+                        ? "The proof matches the request and the registry checks passed."
+                        : "Open Evidence for the failing check."}
                 </p>
             </div>
             <div class="category-list">
@@ -387,7 +492,7 @@ function renderVerificationSummary(): string {
                     .join("")}
             </div>
             <div class="toggle-row">
-                ${renderToggle("showAdvancedVerification", "Advanced verification log")}
+                ${renderToggle("showAdvancedVerification", "Evidence details")}
             </div>
             ${state.toggles.showAdvancedVerification ? `
                 <div class="check-list advanced-check-list">
@@ -418,17 +523,14 @@ function renderProofPanel(): string {
         return `
             <div class="empty-state">
                 <strong>Proof not available yet</strong>
-                <p>Reveal exactly the three required facts first. The student can then prove each one without exposing the rest of the transcript.</p>
+                <p>Share proof from the wallet first.</p>
             </div>
         `;
     }
 
     return `
         <div class="proof-shell">
-            <p class="proof-intro">
-                Each revealed fact is linked to the full credential through a Merkle tree.
-                The verifier can confirm the fact is authentic without seeing hidden transcript rows.
-            </p>
+            <p class="proof-intro">Each revealed fact stays linked to the full credential through a Merkle path.</p>
             <div class="proof-tabs">
                 ${state.scenario.presentation.disclosed
                     .map(
@@ -455,7 +557,7 @@ function renderProofPanel(): string {
                 </div>
             </div>
             <div class="toggle-row">
-                ${renderToggle("showMerkleInternals", "Show Merkle proof internals")}
+                ${renderToggle("showMerkleInternals", "Show advanced evidence")}
             </div>
             ${state.toggles.showMerkleInternals ? `
                 <div class="proof-head proof-head-technical">
@@ -552,12 +654,12 @@ function renderChainStatusCards(snapshot?: ChainSnapshot): string {
                 <article class="status-card neutral">
                     <span>Issuer authorized</span>
                     <strong>Not checked yet</strong>
-                    <p>Connect to a local chain and refresh to see live status.</p>
+                    <p>Check the registry to read live status.</p>
                 </article>
                 <article class="status-card neutral">
                     <span>Credential anchored</span>
                     <strong>Unknown</strong>
-                    <p>Anchor the credential on-chain to record its status.</p>
+                    <p>Anchor the credential on-chain to record it.</p>
                 </article>
                 <article class="status-card neutral">
                     <span>Not revoked</span>
@@ -583,22 +685,22 @@ function renderChainStatusCards(snapshot?: ChainSnapshot): string {
             <article class="status-card ${issuerAuthorized ? "good" : "bad"}">
                 <span>Issuer authorized</span>
                 <strong>${issuerAuthorized ? "Yes" : "No"}</strong>
-                <p>${escapeHtml(snapshot.organizationName ?? DEMO_ORGANIZATION.name)} is ${issuerAuthorized ? "registered" : "not registered"} on the chain.</p>
+                <p>${escapeHtml(snapshot.organizationName ?? DEMO_ORGANIZATION.name)} is ${issuerAuthorized ? "registered" : "missing"}.</p>
             </article>
             <article class="status-card ${credentialAnchored ? "good" : "neutral"}">
                 <span>Credential anchored</span>
                 <strong>${credentialAnchored ? "Yes" : "No"}</strong>
-                <p>${credentialAnchored ? "A commitment for this credential exists on-chain." : "Not anchored yet — use Anchor credential in advanced setup."}</p>
+                <p>${credentialAnchored ? "A commitment exists on-chain." : "Not anchored yet."}</p>
             </article>
             <article class="status-card ${notRevoked ? "good" : "bad"}">
                 <span>Not revoked</span>
                 <strong>${notRevoked ? "Yes" : "No"}</strong>
-                <p>${notRevoked ? "No revocation flag is set for this credential." : "This credential has been revoked on-chain."}</p>
+                <p>${notRevoked ? "No revocation flag is set." : "This credential has been revoked."}</p>
             </article>
             <article class="status-card ${issuerActive ? "good" : "bad"}">
                 <span>Issuer active</span>
                 <strong>${issuerActive ? "Yes" : "No"}</strong>
-                <p>${issuerActive ? "The issuing organization is active." : "The issuer organization is inactive or suspended."}</p>
+                <p>${issuerActive ? "The issuing organization is active." : "The issuer is inactive."}</p>
             </article>
         </div>
     `;
@@ -611,8 +713,8 @@ function renderChainHelpPanel(): string {
     if (!chainReady) {
         return `
             <div class="chain-help-panel">
-                <strong>Blockchain not connected</strong>
-                <p>Open advanced local chain setup below and enter contract addresses to check live registry status.</p>
+                <strong>Advanced setup hidden</strong>
+                <p>Open advanced setup to enter the RPC URL and contract addresses.</p>
             </div>
         `;
     }
@@ -626,31 +728,31 @@ function renderChainHelpPanel(): string {
         `;
     }
 
-    if (!snapshot) {
-        return `
-            <div class="chain-help-panel">
-                <strong>Ready to check blockchain status</strong>
-                <p>Click Refresh blockchain status to read issuer authorization, anchoring, and revocation state.</p>
-            </div>
-        `;
-    }
-
     return "";
 }
 
 function renderChainPanel(): string {
     const chainReady = isChainConfigured();
     const snapshot = state.chainSnapshot;
-    const chainDisabled = !chainReady;
     const helpPanel = renderChainHelpPanel();
+    const primaryAction = chainReady ? "refresh-chain" : "set-up-chain";
+    const primaryDisabled = false;
+    const chainDisabled = !chainReady;
 
     return `
         <div class="chain-flow">
+            ${chainReady ? `
+                <div class="chain-help-panel">
+                    <strong>Connected to local chain</strong>
+                    <p>Refresh to read the latest issuer, anchor, and revocation state.</p>
+                </div>
+            ` : ""}
             <div class="chain-status-band">
                 ${renderChainStatusCards(snapshot)}
             </div>
             <div class="chain-primary-actions">
-                ${renderButton("refresh-chain", {variant: "primary", disabled: chainDisabled})}
+                ${renderButton(primaryAction, {variant: "primary", disabled: primaryDisabled})}
+                ${renderButton("continue-to-privacy", {variant: "ghost"})}
             </div>
             ${helpPanel}
             <div class="chain-advanced-toggle">
@@ -661,7 +763,11 @@ function renderChainPanel(): string {
                     <div class="chain-form">
                         <label>
                             <span>RPC URL</span>
-                            <input data-chain-field="rpcUrl" value="${escapeHtml(state.chainInputs.rpcUrl)}" />
+                            <input
+                                data-chain-field="rpcUrl"
+                                value="${escapeHtml(state.chainInputs.rpcUrl)}"
+                                placeholder="http://127.0.0.1:8545"
+                            />
                         </label>
                         <label>
                             <span>IssuerRegistryV2</span>
@@ -704,7 +810,7 @@ function renderChainPanel(): string {
                                 <p>${snapshot.organizationActive ? "Active controller path" : "Inactive or unknown"}</p>
                             </article>
                             <article>
-                                <span>StatusOf</span>
+                                <span>Credential status</span>
                                 <strong>${escapeHtml(formatStatus(snapshot.status))}</strong>
                                 <p>${snapshot.isRevoked ? "Revocation bit is set" : "Revocation bit is clear"}</p>
                             </article>
@@ -767,293 +873,438 @@ function renderChainPanel(): string {
     `;
 }
 
+function renderOverviewStep(): string {
+    const modeLabel = getProductModeLabel(state.chainInputs);
+    const currentMeta = getWorkspaceMeta(state.activeStep);
+
+    return `
+        <section class="section demo-step">
+            <div class="section-head">
+                <div>
+                    <p>Dashboard</p>
+                    <h2>Issue, share, verify, or check registry status.</h2>
+                    <p class="section-deck">Pick one workspace and move the flow forward.</p>
+                </div>
+                <span>${escapeHtml(modeLabel)}</span>
+            </div>
+            <div class="dashboard-layout">
+                <div class="dashboard-summary">
+                    <article class="status-card good">
+                        <span>You are</span>
+                        <strong>${escapeHtml(currentMeta.roleLabel)}</strong>
+                        <p>${escapeHtml(currentMeta.title)}</p>
+                    </article>
+                    <article class="status-card good">
+                        <span>Primary action</span>
+                        <strong>${escapeHtml(currentMeta.actionLabel)}</strong>
+                        <p>${escapeHtml(currentMeta.description)}</p>
+                    </article>
+                    <article class="status-card neutral">
+                        <span>Result</span>
+                        <strong>${escapeHtml(currentMeta.resultLabel)}</strong>
+                        <p>The action updates the visible state after it runs.</p>
+                    </article>
+                    <article class="status-card neutral">
+                        <span>Why blockchain</span>
+                        <strong>Independent trust source</strong>
+                        <p>Registry reads confirm issuer authority, anchoring, and revocation.</p>
+                    </article>
+                </div>
+                <div class="story-band">
+                    ${DEMO_STORY_CARDS
+                        .map(
+                            (card) => `
+                                <article class="story-card">
+                                    <span>${escapeHtml(card.role)}</span>
+                                    <strong>${escapeHtml(card.title)}</strong>
+                                    <p>${escapeHtml(card.body)}</p>
+                                </article>
+                            `
+                        )
+                        .join("")}
+                </div>
+                <div class="action-card-grid">
+                    ${renderActionCard(
+                        "Issue credential",
+                        "Create the signed record.",
+                        "start-demo",
+                        {variant: "primary", badge: "University"}
+                    )}
+                    ${renderActionCard(
+                        "Share proof",
+                        "Reveal only the requested facts.",
+                        "reveal",
+                        {badge: "Wallet"}
+                    )}
+                    ${renderActionCard(
+                        "Verify proof",
+                        "Check the proof and request match.",
+                        "verify",
+                        {badge: "Verifier"}
+                    )}
+                    ${renderActionCard(
+                        "Check registry",
+                        "Read issuer authority and revocation.",
+                        isChainConfigured() ? "refresh-chain" : "set-up-chain",
+                        {badge: "Registry"}
+                    )}
+                </div>
+            </div>
+            <div class="policy-callout good overview-callout">
+                <strong>Flow</strong>
+                <p>University signs, the student reveals, the verifier checks, and the registry confirms trust.</p>
+            </div>
+        </section>
+    `;
+}
+
+function renderIssueStep(): string {
+    const credential = state.scenario.credential;
+    const rawMetadata = {
+        version: credential.version,
+        credentialType: credential.credentialType,
+        schemaURI: credential.schemaURI,
+        issuedAt: credential.issuedAt,
+        expiresAt: credential.expiresAt,
+        claimCount: credential.claimCount
+    };
+
+    return `
+        <section class="section demo-step">
+            <div class="section-head">
+                <div>
+                    <p>University Issuer</p>
+                    <h2>University creates and signs the credential.</h2>
+                    <p class="section-deck">Issue one signed record the student can hold.</p>
+                </div>
+                <span>Signed by university</span>
+            </div>
+            <div class="issue-layout">
+                <div class="ledger-panel">
+                    <div class="status-cards issue-status-cards">
+                        <article class="status-card good">
+                            <span>Issuer profile</span>
+                            <strong>Signed</strong>
+                            <p>${escapeHtml(DEMO_ORGANIZATION.name)} signs the record.</p>
+                        </article>
+                        <article class="status-card good">
+                            <span>Credential template</span>
+                            <strong>V2</strong>
+                            <p>V2 schema and issuer profile.</p>
+                        </article>
+                        <article class="status-card good">
+                            <span>Transcript scope</span>
+                            <strong>${credential.claimCount} facts</strong>
+                            <p>The full transcript is signed once.</p>
+                        </article>
+                        <article class="status-card neutral">
+                            <span>Private facts</span>
+                            <strong>${state.scenario.policy.hiddenCount} hidden</strong>
+                            <p>${formatHiddenSummary(state.scenario.policy.hiddenCount)} stay private.</p>
+                        </article>
+                    </div>
+                    <div class="policy-callout good">
+                        <strong>Signed by university</strong>
+                        <p>The credential is ready for the student wallet.</p>
+                    </div>
+                    <div class="hero-actions">
+                        ${renderButton("issue", {variant: "primary"})}
+                    </div>
+                    <div class="toggle-row">
+                        ${renderToggle("showCredentialDetails", "Show advanced issuer details")}
+                    </div>
+                    ${state.toggles.showCredentialDetails ? `
+                        <div class="meta-grid issue-technical-grid">
+                            <article>
+                                <span>Credential digest</span>
+                                <code>${escapeHtml(short(state.scenario.credentialDigest, 18, 12))}</code>
+                            </article>
+                            <article>
+                                <span>Merkle root</span>
+                                <code>${escapeHtml(short(credential.merkleRoot, 18, 12))}</code>
+                            </article>
+                            <article>
+                                <span>Issuer signature</span>
+                                <code>${escapeHtml(formatSignature(credential.signature))}</code>
+                            </article>
+                            <article>
+                                <span>Holder address</span>
+                                <code>${escapeHtml(short(credential.holder, 18, 12))}</code>
+                            </article>
+                            <article>
+                                <span>Raw credential metadata</span>
+                                <code>${escapeHtml(JSON.stringify(rawMetadata))}</code>
+                            </article>
+                        </div>
+                    ` : ""}
+                </div>
+                <div class="story-panel">
+                    <h3>Issuer profile</h3>
+                    <p>The issuer signs once. The student receives the credential in a wallet.</p>
+                    <dl class="story-list">
+                        <div><dt>Issuer</dt><dd>${escapeHtml(DEMO_ORGANIZATION.name)}</dd></div>
+                        <div><dt>Holder</dt><dd>${escapeHtml(short(credential.holder, 18, 12))}</dd></div>
+                        <div><dt>Total facts</dt><dd>${credential.claimCount}</dd></div>
+                        <div><dt>Hidden facts</dt><dd>${state.scenario.policy.hiddenCount}</dd></div>
+                    </dl>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function renderRevealStep(): string {
+    return `
+        <section class="section demo-step">
+            <div class="section-head">
+                <div>
+                    <p>Student Wallet</p>
+                    <h2>The student chooses what to reveal.</h2>
+                    <p class="section-deck">Share only the facts the verifier asked for.</p>
+                </div>
+                <span>Wallet privacy summary</span>
+            </div>
+            <div class="wallet-layout">
+                <div class="ledger-panel wallet-panel">
+                    <div class="wallet-card">
+                        <span>Student-owned credential</span>
+                        <strong>${escapeHtml(DEMO_ORGANIZATION.name)}</strong>
+                        <p>The wallet keeps the credential ready for selective disclosure.</p>
+                        <dl class="wallet-summary">
+                            <div><dt>Revealed facts</dt><dd>${state.scenario.policy.disclosedCount}</dd></div>
+                            <div><dt>Hidden facts</dt><dd>${state.scenario.policy.hiddenCount}</dd></div>
+                            <div><dt>Status</dt><dd>Ready to share</dd></div>
+                        </dl>
+                    </div>
+                    <div class="policy-callout good">
+                        <strong>Share proof</strong>
+                        <p>Reveal degree field, GPA, and thesis only.</p>
+                    </div>
+                    <div class="hero-actions">
+                        ${renderButton("reveal", {variant: "primary"})}
+                    </div>
+                    <div class="toggle-row">
+                        ${renderToggle("showRawClaims", "Show raw wallet data")}
+                    </div>
+                    <p class="support-text">The wallet keeps the rest hidden.</p>
+                </div>
+                <div class="claim-column">
+                    <div class="policy-panel">
+                        <div class="policy-tags">
+                            ${requiredClaimLabels()
+                                .map((label) => `<span>${escapeHtml(label)}</span>`)
+                                .join("")}
+                        </div>
+                        ${renderPolicyWarnings()}
+                        ${renderClaims()}
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function renderVerifyStep(): string {
+    return `
+        <section class="section demo-step">
+            <div class="section-head">
+                <div>
+                    <p>Verifier Portal</p>
+                    <h2>${state.verification?.valid ? "Proof accepted" : "Proof waiting for review"}</h2>
+                    <p class="section-deck">Check the proof without exposing the transcript.</p>
+                </div>
+                <span>${state.verification?.valid ? "Accepted" : state.verificationRan ? "Rejected" : "Awaiting proof"}</span>
+            </div>
+            <div class="verification-panel">
+                <div class="policy-callout good verify-summary-callout">
+                    <strong>Verification request</strong>
+                    <p>degree field, GPA, thesis</p>
+                </div>
+                <div class="hero-actions">
+                    ${renderButton("verify", {variant: "primary"})}
+                </div>
+                <div class="toggle-row">
+                    ${renderToggle("showAdvancedVerification", "Evidence details")}
+                </div>
+                ${renderVerificationSummary()}
+            </div>
+        </section>
+    `;
+}
+
+function renderBlockchainStep(): string {
+    return `
+        <section class="section demo-step">
+            <div class="section-head">
+                <div>
+                    <p>Blockchain Registry</p>
+                    <h2>Registry confirms trust and revocation.</h2>
+                    <p class="section-deck">Refresh live chain status when you want a new read.</p>
+                </div>
+                <span>Live registry</span>
+            </div>
+            ${renderChainPanel()}
+        </section>
+    `;
+}
+
+function renderPrivacyStep(): string {
+    const snapshot = state.chainSnapshot;
+    const proofClaim = state.scenario.presentation?.disclosed.find((claim) => claim.key === state.proofFocusKey)
+        ?? state.scenario.presentation?.disclosed[0];
+
+    return `
+        <section class="section demo-step">
+            <div class="section-head">
+                <div>
+                    <p>Evidence / Advanced</p>
+                    <h2>Technical evidence and proof material.</h2>
+                    <p class="section-deck">Hashes, proofs, signatures, and checks stay collapsed by default.</p>
+                </div>
+                <span>Technical evidence</span>
+            </div>
+            <div class="privacy-grid">
+                <article class="boundary-card">
+                    <span>What was revealed</span>
+                    <strong>${escapeHtml(formatRevealedSummary(state.scenario.policy.selectedClaimKeys))}</strong>
+                    <p>${state.scenario.policy.disclosedCount} facts were shared with the verifier.</p>
+                </article>
+                <article class="boundary-card">
+                    <span>What stayed hidden</span>
+                    <strong>${escapeHtml(formatHiddenSummary(state.scenario.policy.hiddenCount))}</strong>
+                    <p>Courses, research, and transcript rows stayed hidden.</p>
+                </article>
+                <article class="boundary-card">
+                    <span>What went on-chain</span>
+                    <strong>Commitments only</strong>
+                    <p>Credential anchors, registry status, and revocation signals.</p>
+                </article>
+                <article class="boundary-card emphasis">
+                    <span>What never left the student</span>
+                    <strong>Raw transcript data</strong>
+                    <p>The private transcript never appears unless the holder reveals it.</p>
+                </article>
+            </div>
+            <div class="hero-actions privacy-actions">
+                ${renderButton("restart-demo", {variant: "secondary"})}
+            </div>
+            <div class="toggle-row">
+                ${renderToggle("showMerkleInternals", "Show advanced evidence")}
+            </div>
+            ${state.toggles.showMerkleInternals ? `
+                <div class="privacy-advanced">
+                    <div class="privacy-advanced-grid">
+                        <article class="boundary-card">
+                            <span>Credential digest</span>
+                            <strong>${escapeHtml(short(state.scenario.credentialDigest, 18, 12))}</strong>
+                            <p>Digest over the signed credential metadata.</p>
+                        </article>
+                        <article class="boundary-card">
+                            <span>Merkle root</span>
+                            <strong>${escapeHtml(short(state.scenario.credential.merkleRoot, 18, 12))}</strong>
+                            <p>The root anchors the revealed claims.</p>
+                        </article>
+                        <article class="boundary-card">
+                            <span>Issuer signature</span>
+                            <strong>${escapeHtml(formatSignature(state.scenario.credential.signature))}</strong>
+                            <p>University signature over the credential payload.</p>
+                        </article>
+                        <article class="boundary-card">
+                            <span>Presentation digest</span>
+                            <strong>${state.scenario.presentationAuthorizationDigest ? escapeHtml(short(state.scenario.presentationAuthorizationDigest, 18, 12)) : "Unavailable"}</strong>
+                            <p>Digest used to bind the holder’s presentation authorization.</p>
+                        </article>
+                        <article class="boundary-card">
+                            <span>Request digest</span>
+                            <strong>${escapeHtml(short(state.scenario.requestDigest, 18, 12))}</strong>
+                            <p>Verifier request digest recorded for binding checks.</p>
+                        </article>
+                        <article class="boundary-card">
+                            <span>Merkle proof siblings</span>
+                            <strong>${proofClaim ? `${proofClaim.proof.length} siblings` : "Unavailable"}</strong>
+                            <p>Each revealed fact is linked to the full credential through a Merkle path.</p>
+                        </article>
+                        <article class="boundary-card">
+                            <span>Salts and siblings</span>
+                            <strong>${proofClaim ? escapeHtml(short(proofClaim.salt, 18, 12)) : "Unavailable"}</strong>
+                            <p>Proof siblings and salts stay in the advanced view only.</p>
+                        </article>
+                        <article class="boundary-card">
+                            <span>Revocation bitmap</span>
+                            <strong>${snapshot?.revocationWordValue !== undefined ? escapeHtml(formatWord(snapshot.revocationWordValue)) : "Unavailable"}</strong>
+                            <p>Revocation slots are read from the local registry when blockchain status is checked.</p>
+                        </article>
+                        <article class="boundary-card">
+                            <span>Anchor comparison</span>
+                            <strong>${snapshot?.anchorComparison?.matches ? "Matched" : snapshot?.anchorComparison ? "Mismatch" : "Not checked"}</strong>
+                            <p>${snapshot?.anchorComparison?.matches ? "The anchor matches the local credential." : snapshot?.anchorComparison ? "One or more anchored fields differ." : "Check blockchain status first."}</p>
+                        </article>
+                    </div>
+                    <div class="privacy-proof-panel">
+                        ${renderProofPanel()}
+                    </div>
+                </div>
+            ` : ""}
+        </section>
+    `;
+}
+
+function renderActiveStepContent(): string {
+    switch (state.activeStep) {
+        case "overview":
+            return renderOverviewStep();
+        case "issue":
+            return renderIssueStep();
+        case "reveal":
+            return renderRevealStep();
+        case "verify":
+            return renderVerifyStep();
+        case "blockchain":
+            return renderBlockchainStep();
+        case "privacy":
+            return renderPrivacyStep();
+    }
+}
+
+async function executeActionPlan(plan: ReturnType<typeof planAction>, action: string): Promise<void> {
+    if (plan.nextStep) {
+        setActiveStep(plan.nextStep);
+    }
+
+    if (plan.refreshScenario) {
+        synchronizeScenario(Boolean(plan.refreshTimestamps));
+    }
+
+    if (plan.resetClaimsToRequired) {
+        state.selectedClaims = new Set(DEMO_REQUIRED_CLAIMS);
+        synchronizeScenario();
+    }
+
+    if (plan.openAdvancedChain) {
+        state.toggles.showAdvancedChain = true;
+    }
+
+    if (plan.noticeKind && plan.noticeText) {
+        setNotice(plan.noticeKind, plan.noticeText);
+    }
+
+    if (plan.rerunVerification) {
+        await runVerification();
+    }
+}
+
 function render(): void {
     const app = document.querySelector<HTMLDivElement>("#app");
     if (!app) throw new Error("Missing #app");
 
-    const disclosedCount = state.scenario.policy.disclosedCount;
-    const hiddenCount = state.scenario.policy.hiddenCount;
-
     app.innerHTML = `
         <div class="page-shell">
-            <header class="hero">
-                <div class="hero-copy">
-                    <p class="eyebrow">Academic credential demo</p>
-                    <h1>Prove graduation without revealing your transcript</h1>
-                    <p class="hero-text">
-                        Watch a university issue a credential, a student share only what a verifier needs,
-                        and a blockchain registry confirm the result — while private transcript details stay hidden.
-                    </p>
-                    <div class="hero-actions">
-                        ${renderButton("issue", {variant: "primary"})}
-                        ${renderButton("match-policy", {variant: "secondary"})}
-                        ${renderButton("verify", {variant: "ghost", disabled: !state.scenario.presentation})}
-                    </div>
-                </div>
-                <aside class="hero-rail">
-                    <div class="metric-block">
-                        <span>University</span>
-                        <strong>${escapeHtml(DEMO_ORGANIZATION.name)}</strong>
-                        <p class="hero-note">${disclosedCount} facts revealed · ${hiddenCount} stay private</p>
-                    </div>
-                    <div class="toggle-row">
-                        ${renderToggle("showHeroTechnical", "Inspect technical identifiers")}
-                    </div>
-                    ${state.toggles.showHeroTechnical ? `
-                        <div class="metric-strip">
-                            <article>
-                                <span>Organization id</span>
-                                <code>${escapeHtml(short(state.scenario.credential.issuerOrganizationId, 18, 12))}</code>
-                            </article>
-                            <article>
-                                <span>Credential digest</span>
-                                <code>${escapeHtml(short(state.scenario.credentialDigest, 16, 10))}</code>
-                            </article>
-                            <article>
-                                <span>Merkle root</span>
-                                <code>${escapeHtml(short(state.scenario.credential.merkleRoot, 16, 10))}</code>
-                            </article>
-                        </div>
-                    ` : ""}
-                </aside>
-            </header>
+            ${renderStepShell()}
 
             ${state.notice ? `<div class="notice ${state.notice.kind}">${escapeHtml(state.notice.text)}</div>` : ""}
             ${state.busyLabel ? `<div class="status-line"><span></span>${escapeHtml(state.busyLabel)}</div>` : ""}
 
-            <section class="story-band">
-                ${DEMO_STORY_CARDS
-                    .map(
-                        (card) => `
-                            <article class="story-card">
-                                <span>${escapeHtml(card.role)}</span>
-                                <strong>${escapeHtml(card.title)}</strong>
-                                <p>${escapeHtml(card.body)}</p>
-                            </article>
-                        `
-                    )
-                    .join("")}
-            </section>
-
-            <main class="content-grid">
-                <section class="section issue">
-                    <div class="section-head">
-                        <div>
-                            <h2>Step 1 — University issues a credential</h2>
-                            <p class="section-deck">${escapeHtml(DEMO_ORGANIZATION.name)} signs a full academic record with eight facts. Most stay private unless the student chooses to reveal them.</p>
-                        </div>
-                        <span>${state.scenario.credential.claimCount} facts in the credential</span>
-                    </div>
-                    <div class="issue-layout">
-                        <div class="ledger-panel">
-                            <div class="meta-grid meta-grid-simple">
-                                <article>
-                                    <span>Issued by</span>
-                                    <strong>${escapeHtml(DEMO_ORGANIZATION.name)}</strong>
-                                </article>
-                                <article>
-                                    <span>Credential type</span>
-                                    <strong>${escapeHtml(state.scenario.credential.credentialType)}</strong>
-                                </article>
-                                <article>
-                                    <span>Issued at</span>
-                                    <strong>${escapeHtml(formatTimestamp(state.scenario.credential.issuedAt))}</strong>
-                                </article>
-                                <article>
-                                    <span>Total facts</span>
-                                    <strong>${state.scenario.credential.claimCount}</strong>
-                                </article>
-                            </div>
-                            <div class="toggle-row">
-                                ${renderToggle("showCredentialDetails", "Inspect credential details")}
-                            </div>
-                            ${state.toggles.showCredentialDetails ? `
-                                <div class="meta-grid">
-                                    <article>
-                                        <span>Issuer signing address</span>
-                                        <code>${escapeHtml(short(state.scenario.credential.issuerSigningAddress, 18, 12))}</code>
-                                    </article>
-                                    <article>
-                                        <span>Holder address</span>
-                                        <code>${escapeHtml(short(state.scenario.credential.holder, 18, 12))}</code>
-                                    </article>
-                                    <article>
-                                        <span>Credential id</span>
-                                        <code>${escapeHtml(short(state.scenario.credential.id, 18, 12))}</code>
-                                    </article>
-                                    <article>
-                                        <span>Expires at</span>
-                                        <strong>${escapeHtml(formatTimestamp(state.scenario.credential.expiresAt))}</strong>
-                                    </article>
-                                </div>
-                                <div class="signature-stack">
-                                    <div>
-                                        <span>Issuer signature</span>
-                                        <code>${escapeHtml(formatSignature(state.scenario.credential.signature))}</code>
-                                    </div>
-                                    <div>
-                                        <span>Holder signature</span>
-                                        <code>${escapeHtml(
-                                            state.scenario.presentation
-                                                ? formatSignature(state.scenario.presentation.presentationAuthorization.signature)
-                                                : "Awaiting exact policy match"
-                                        )}</code>
-                                    </div>
-                                    <div>
-                                        <span>Request digest</span>
-                                        <code>${escapeHtml(short(state.scenario.requestDigest, 20, 14))}</code>
-                                    </div>
-                                </div>
-                            ` : ""}
-                        </div>
-                        <div class="story-panel">
-                            <h3>Sample narrative</h3>
-                            <p>
-                                The issuer is ${escapeHtml(DEMO_ORGANIZATION.name)}. The credential tells a concrete story:
-                                a computer science degree, a strong GPA, a thesis on privacy-preserving credentials, and several course-level transcript facts that stay hidden unless explicitly requested.
-                            </p>
-                            <dl class="story-list">
-                                <div><dt>Degree field</dt><dd>Computer Science, Bachelor of Engineering</dd></div>
-                                <div><dt>GPA</dt><dd>3.72 / 4.00 with Very Good honors</dd></div>
-                                <div><dt>Thesis</dt><dd>Selective Disclosure Proof Systems for Academic Credentials</dd></div>
-                                <div><dt>Hidden transcript facts</dt><dd>Courses, research lab affiliation, and transcript detail remain off-chain and undisclosed here.</dd></div>
-                            </dl>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="section disclosure">
-                    <div class="section-head">
-                        <div>
-                            <p>Step 2 — Selective disclosure</p>
-                            <h2>Only these facts are revealed</h2>
-                            <p class="section-deck">The verifier asked for ${escapeHtml(requiredClaimLabels().join(", ").toLowerCase())}. Everything else stays hidden.</p>
-                        </div>
-                        <span>${disclosedCount} revealed · ${hiddenCount} hidden</span>
-                    </div>
-                    <div class="disclosure-layout">
-                        <div class="policy-panel">
-                            <div class="policy-tags">
-                                ${requiredClaimLabels()
-                                    .map((label) => `<span>${escapeHtml(label)}</span>`)
-                                    .join("")}
-                            </div>
-                            ${renderPolicyWarnings()}
-                            <div class="toggle-row">
-                                ${renderToggle("showRawClaims", "Inspect raw claim data")}
-                            </div>
-                            <p class="support-text">
-                                The student must reveal exactly what the verifier requested — no extra transcript fields, and no missing required facts.
-                            </p>
-                        </div>
-                        <div class="claim-column">
-                            ${renderClaims()}
-                        </div>
-                    </div>
-                </section>
-
-                <section class="section merkle">
-                    <div class="section-head alt-head">
-                        <div>
-                            <p>Step 3 — Cryptographic proof</p>
-                            <h2>Why hidden data still proves correctly</h2>
-                            <p class="section-deck">Revealed facts are mathematically linked to the full credential without exposing private transcript rows.</p>
-                        </div>
-                        <span>${state.scenario.presentation?.disclosed.length ?? 0} revealed facts</span>
-                    </div>
-                    ${renderProofPanel()}
-                </section>
-
-                <section class="section verification">
-                    <div class="section-head alt-head">
-                        <div>
-                            <p>Step 4 — Verification</p>
-                            <h2>Does the proof check out?</h2>
-                            <p class="section-deck">The verifier confirms signatures, policy match, and that hidden transcript data was not revealed.</p>
-                        </div>
-                        <span>${state.verification?.valid ? "Passed" : state.verificationRan ? "Failed" : "Not run yet"}</span>
-                    </div>
-                    <div class="verification-layout">
-                        <div class="binding-panel">
-                            <article>
-                                <span>Verifier requested</span>
-                                <strong>${escapeHtml(requiredClaimLabels().join(", "))}</strong>
-                            </article>
-                            <article>
-                                <span>Audience</span>
-                                <strong>${escapeHtml(DEMO_AUDIENCE)}</strong>
-                            </article>
-                            ${state.toggles.showAdvancedVerification ? `
-                                <article>
-                                    <span>Holder authorization digest</span>
-                                    <code>${escapeHtml(
-                                        state.scenario.presentationAuthorizationDigest
-                                            ? short(state.scenario.presentationAuthorizationDigest, 20, 14)
-                                            : "Unavailable until disclosure matches policy"
-                                    )}</code>
-                                </article>
-                                <article>
-                                    <span>Verifier signing address</span>
-                                    <code>${escapeHtml(short(DEMO_IDENTITIES.verifier.address, 18, 12))}</code>
-                                </article>
-                            ` : ""}
-                        </div>
-                        <div class="verification-panel">
-                            ${renderVerificationSummary()}
-                        </div>
-                    </div>
-                </section>
-
-                <section class="section chain">
-                    <div class="section-head">
-                        <div>
-                            <p>Step 5 — Blockchain registry</p>
-                            <h2>Blockchain status</h2>
-                            <p class="section-deck">The on-chain registry confirms the issuer is authorized and the credential has not been revoked.</p>
-                        </div>
-                        <span>Live registry check</span>
-                    </div>
-                    ${renderChainPanel()}
-                </section>
-
-                <section class="section privacy section-spaced">
-                    <div class="section-head alt-head">
-                        <div>
-                            <h2>Privacy boundary</h2>
-                            <p class="section-deck">The registry stores commitments, not transcript contents, and undisclosed transcript data never leaves the holder here.</p>
-                        </div>
-                        <span>Hidden transcript material stays local unless the holder reveals it</span>
-                    </div>
-                    <div class="privacy-grid">
-                        <article class="boundary-card">
-                            <span>Anchored on-chain</span>
-                            <strong>Only commitment material</strong>
-                            <ul>
-                                <li>Organization id and issuer signing address</li>
-                                <li>Credential digest, Merkle root, holder commitment</li>
-                                <li>IssuedAt, expiresAt, claim count, revocation slot, status</li>
-                            </ul>
-                        </article>
-                        <article class="boundary-card">
-                            <span>Never written on-chain</span>
-                            <strong>Private transcript contents</strong>
-                            <ul>
-                                ${state.scenario.policy.hiddenClaimKeys
-                                    .map((claimKey) => `<li>${escapeHtml(claimKey)}</li>`)
-                                    .join("")}
-                            </ul>
-                        </article>
-                        <article class="boundary-card emphasis">
-                            <span>Demo takeaway</span>
-                            <strong>Hidden claims remain hidden</strong>
-                            <p>
-                                The undisclosed courses, research lab affiliation, and extra transcript structure are absent from the request,
-                                absent from the presentation, and impossible to reconstruct from the on-chain V2 registry.
-                            </p>
-                        </article>
-                    </div>
-                </section>
-            </main>
+            ${renderActiveStepContent()}
         </div>
     `;
 
@@ -1061,6 +1312,15 @@ function render(): void {
 }
 
 function bindEvents(root: HTMLElement): void {
+    root.querySelectorAll<HTMLButtonElement>("[data-step-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const stepId = button.dataset.stepId as DemoStepId | undefined;
+            if (!stepId) return;
+            setActiveStep(stepId);
+            render();
+        });
+    });
+
     root.querySelectorAll<HTMLInputElement>("[data-claim-key]").forEach((input) => {
         input.addEventListener("change", () => {
             const claimKey = input.dataset.claimKey;
@@ -1114,104 +1374,114 @@ function bindEvents(root: HTMLElement): void {
 
 async function handleAction(action: string): Promise<void> {
     try {
-        if (action === "issue") {
-            synchronizeScenario(true);
-            await runVerification();
-            setNotice("ok", "A fresh credential was issued with updated timestamps.");
-            render();
-            return;
-        }
-
-        if (action === "match-policy") {
-            state.selectedClaims = new Set(DEMO_REQUIRED_CLAIMS);
-            synchronizeScenario();
-            await runVerification();
-            setNotice("ok", "Revealed facts reset to the three required by the verifier.");
-            render();
-            return;
-        }
-
         if (action === "verify") {
             if (!state.scenario.presentation) {
                 throw new Error(state.scenario.presentationError ?? "The disclosure must exactly match the verifier policy before verification can run.");
             }
+
             setBusy(action, "Verifying signatures, policy match, and cryptographic proofs...");
             await runVerification();
+            setActiveStep("blockchain");
             setNotice(state.verification?.valid ? "ok" : "bad", state.verification?.valid ? "Verification passed." : "Verification failed.");
             return;
         }
 
-        ensureChainConfigured();
-
-        const labels: Record<string, string> = {
-            "refresh-chain": "Reading blockchain registry status...",
-            "register-org": "Registering the demo university on the V2 issuer registry...",
-            anchor: "Anchoring the V2 credential with the issuer signing key...",
-            revoke: "Revoking the anchored credential in the organization bitmap...",
-            suspend: "Suspending the issuer organization to surface IssuerInactive status..."
-        };
-
-        setBusy(action, labels[action] ?? "Working...");
-
-        if (action === "refresh-chain") {
-            await refreshChainSnapshot();
-            setNotice("ok", "Blockchain status refreshed.");
+        const plan = planAction(action, isChainConfigured());
+        if (plan.nextStep === "overview" && action === "restart-demo") {
+            resetDemo();
+            setNotice("ok", "Opened the dashboard.");
+            render();
             return;
         }
 
-        if (action === "register-org") {
-            const adminClient = writeClient(DEMO_PRIVATE_KEYS.admin);
-            const txHash = await adminClient.registerOrganization({
-                organizationId: DEMO_ORGANIZATION.id,
-                controller: keyPairFromPrivateKey(DEMO_PRIVATE_KEYS.verifier).address,
-                name: DEMO_ORGANIZATION.name,
-                metadataURI: DEMO_ORGANIZATION.metadataURI,
-                initialSigningKey: keyPairFromPrivateKey(DEMO_PRIVATE_KEYS.issuer).address,
-                initialValidFrom: state.scenario.credential.issuedAt
-            });
-            await refreshChainSnapshot(txHash);
-            setNotice("ok", `Organization registered in ${short(txHash, 18, 12)}.`);
+        if (plan.chainAction) {
+            if (plan.requiresChainConfiguration) {
+                ensureChainConfigured();
+            }
+
+            setBusy(action, {
+                "refresh-chain": "Reading blockchain registry status...",
+                "check-chain": "Reading blockchain registry status...",
+                "register-org": "Registering the university on the V2 issuer registry...",
+                anchor: "Anchoring the V2 credential with the issuer signing key...",
+                revoke: "Revoking the anchored credential in the organization bitmap...",
+                suspend: "Suspending the issuer organization to surface IssuerInactive status..."
+            }[action] ?? "Working...");
+
+            if (plan.chainAction === "refresh-chain") {
+                await refreshChainSnapshot();
+                setActiveStep("blockchain");
+                setNotice("ok", "Blockchain status refreshed.");
+                return;
+            }
+
+            if (plan.chainAction === "register-org") {
+                const adminClient = writeClient(DEMO_PRIVATE_KEYS.admin);
+                const txHash = await adminClient.registerOrganization({
+                    organizationId: DEMO_ORGANIZATION.id,
+                    controller: keyPairFromPrivateKey(DEMO_PRIVATE_KEYS.verifier).address,
+                    name: DEMO_ORGANIZATION.name,
+                    metadataURI: DEMO_ORGANIZATION.metadataURI,
+                    initialSigningKey: keyPairFromPrivateKey(DEMO_PRIVATE_KEYS.issuer).address,
+                    initialValidFrom: Math.max(1, state.scenario.credential.issuedAt - 3600)
+                });
+                await refreshChainSnapshot(txHash);
+                setActiveStep("blockchain");
+                setNotice("ok", `Organization registered in ${short(txHash, 18, 12)}.`);
+                return;
+            }
+
+            if (plan.chainAction === "anchor") {
+                const issuerClient = writeClient(DEMO_PRIVATE_KEYS.issuer);
+                const txHash = await issuerClient.anchorCredential({
+                    organizationId: state.scenario.credential.issuerOrganizationId as Hex,
+                    credentialId: state.scenario.credential.id as Hex,
+                    credentialDigest: state.scenario.credentialDigest,
+                    holderCommitment: state.scenario.holderCommitment,
+                    merkleRoot: state.scenario.credential.merkleRoot as Hex,
+                    issuedAt: state.scenario.credential.issuedAt,
+                    expiresAt: state.scenario.credential.expiresAt,
+                    claimCount: state.scenario.credential.claimCount
+                });
+                await refreshChainSnapshot(txHash);
+                setActiveStep("blockchain");
+                setNotice("ok", `Credential anchored in ${short(txHash, 18, 12)}.`);
+                return;
+            }
+
+            if (plan.chainAction === "revoke") {
+                const issuerClient = writeClient(DEMO_PRIVATE_KEYS.issuer);
+                const txHash = await issuerClient.revokeCredential(
+                    state.scenario.credential.issuerOrganizationId as Hex,
+                    state.scenario.credential.issuerSigningAddress as `0x${string}`,
+                    state.scenario.credential.id as Hex,
+                    id("capstone-v2-demo-revocation") as Hex
+                );
+                await refreshChainSnapshot(txHash);
+                setActiveStep("blockchain");
+                setNotice("warn", `Credential revoked in ${short(txHash, 18, 12)}.`);
+                return;
+            }
+
+            if (plan.chainAction === "suspend") {
+                const adminClient = writeClient(DEMO_PRIVATE_KEYS.admin);
+                const txHash = await adminClient.suspendOrganization(
+                    state.scenario.credential.issuerOrganizationId as Hex
+                );
+                await refreshChainSnapshot(txHash);
+                setActiveStep("blockchain");
+                setNotice("warn", `Issuer organization suspended in ${short(txHash, 18, 12)}.`);
+                return;
+            }
+
+            if (plan.chainAction) {
+                throw new Error(`Unhandled chain action: ${plan.chainAction}`);
+            }
             return;
         }
 
-        if (action === "anchor") {
-            const issuerClient = writeClient(DEMO_PRIVATE_KEYS.issuer);
-            const txHash = await issuerClient.anchorCredential({
-                organizationId: state.scenario.credential.issuerOrganizationId as Hex,
-                credentialId: state.scenario.credential.id as Hex,
-                credentialDigest: state.scenario.credentialDigest,
-                holderCommitment: state.scenario.holderCommitment,
-                merkleRoot: state.scenario.credential.merkleRoot as Hex,
-                issuedAt: state.scenario.credential.issuedAt,
-                expiresAt: state.scenario.credential.expiresAt,
-                claimCount: state.scenario.credential.claimCount
-            });
-            await refreshChainSnapshot(txHash);
-            setNotice("ok", `Credential anchored in ${short(txHash, 18, 12)}.`);
-            return;
-        }
-
-        if (action === "revoke") {
-            const issuerClient = writeClient(DEMO_PRIVATE_KEYS.issuer);
-            const txHash = await issuerClient.revokeCredential(
-                state.scenario.credential.issuerOrganizationId as Hex,
-                state.scenario.credential.issuerSigningAddress as `0x${string}`,
-                state.scenario.credential.id as Hex,
-                id("capstone-v2-demo-revocation") as Hex
-            );
-            await refreshChainSnapshot(txHash);
-            setNotice("warn", `Credential revoked in ${short(txHash, 18, 12)}.`);
-            return;
-        }
-
-        if (action === "suspend") {
-            const adminClient = writeClient(DEMO_PRIVATE_KEYS.admin);
-            const txHash = await adminClient.suspendOrganization(
-                state.scenario.credential.issuerOrganizationId as Hex
-            );
-            await refreshChainSnapshot(txHash);
-            setNotice("warn", `Issuer organization suspended in ${short(txHash, 18, 12)}.`);
-            return;
+        if (plan.nextStep || plan.openAdvancedChain || plan.refreshScenario || plan.resetClaimsToRequired || plan.rerunVerification) {
+            await executeActionPlan(plan, action);
         }
     } catch (error) {
         setNotice("bad", (error as Error).message);

@@ -166,6 +166,258 @@ pre {
     margin-top: 22px;
 }
 
+.product-shell .hero-text {
+    max-width: 52ch;
+}
+
+.sample-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.6);
+    color: var(--accent-deep);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.product-shell-rail {
+    gap: 12px;
+}
+
+.metric-block-light {
+    background: rgb(255 255 255 / 0.55);
+}
+
+.workspace-nav {
+    display: grid;
+    gap: 10px;
+    padding: 4px 0 0;
+}
+
+.workspace-nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 46px;
+    padding: 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: rgb(255 253 248 / 0.8);
+    text-align: left;
+    cursor: pointer;
+    transition:
+        transform 120ms ease,
+        border-color 160ms ease,
+        background 160ms ease,
+        box-shadow 160ms ease,
+        color 160ms ease;
+}
+
+.workspace-nav-item:hover {
+    transform: translateY(-1px);
+    border-color: rgb(15 95 86 / 0.22);
+    box-shadow: 0 12px 28px rgb(23 34 40 / 0.08);
+}
+
+.workspace-nav-item.completed {
+    background: rgb(217 239 233 / 0.68);
+    border-color: rgb(15 95 86 / 0.18);
+}
+
+.workspace-nav-item.current {
+    background: rgb(255 253 248 / 0.96);
+    border-color: rgb(15 95 86 / 0.34);
+    box-shadow: inset 0 0 0 1px rgb(15 95 86 / 0.08);
+}
+
+.workspace-nav-item.pending {
+    opacity: 0.9;
+}
+
+.workspace-nav-item strong {
+    font-size: 0.92rem;
+    line-height: 1.2;
+}
+
+.demo-step {
+    gap: var(--space-block);
+}
+
+.dashboard-layout {
+    display: grid;
+    gap: var(--space-block);
+}
+
+.dashboard-summary,
+.action-card-grid,
+.wallet-layout {
+    display: grid;
+    gap: var(--space-row);
+}
+
+.dashboard-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.action-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.action-card {
+    display: grid;
+    gap: 16px;
+    padding: 20px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: rgb(255 255 255 / 0.78);
+    box-shadow: var(--shadow);
+}
+
+.action-card-copy {
+    display: grid;
+    gap: 8px;
+}
+
+.action-card-copy strong {
+    font-size: 1.1rem;
+    line-height: 1.25;
+}
+
+.action-card-copy p {
+    margin: 0;
+    color: var(--ink-soft);
+    line-height: 1.55;
+}
+
+.action-card-badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: rgb(15 95 86 / 0.08);
+    color: var(--signal);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.action-card-foot {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.wallet-layout {
+    grid-template-columns: minmax(320px, 0.86fr) minmax(0, 1.14fr);
+}
+
+.wallet-card {
+    display: grid;
+    gap: 10px;
+    padding: 20px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background:
+        linear-gradient(135deg, rgb(15 95 86 / 0.07), rgb(255 255 255 / 0.88)),
+        rgb(255 255 255 / 0.8);
+}
+
+.wallet-card > span {
+    color: var(--accent-deep);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.wallet-card > strong {
+    font-size: 1.18rem;
+    line-height: 1.25;
+}
+
+.wallet-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-row);
+    margin: 8px 0 0;
+}
+
+.wallet-summary dt {
+    color: var(--ink-soft);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.wallet-summary dd {
+    margin: 4px 0 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.overview-band {
+    margin-top: 4px;
+}
+
+.overview-callout,
+.verify-summary-callout {
+    margin-top: 4px;
+}
+
+.issue-status-cards {
+    margin-bottom: 4px;
+}
+
+.issue-technical-grid,
+.privacy-advanced-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.privacy-advanced {
+    display: grid;
+    gap: var(--space-block);
+    margin-top: 4px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: rgb(23 34 40 / 0.03);
+}
+
+.privacy-proof-panel {
+    padding: 0;
+}
+
+.privacy-actions {
+    margin-top: 0;
+}
+
+.demo-step .hero-actions {
+    margin-top: 0;
+}
+
+.demo-step .toggle-row {
+    padding-top: 0;
+}
+
+.demo-step .policy-panel,
+.demo-step .verification-panel,
+.demo-step .ledger-panel,
+.demo-step .story-panel {
+    box-shadow: var(--shadow);
+}
+
+.demo-step .section-head span {
+    max-width: 18rem;
+}
+
 .ui-button {
     position: relative;
     min-height: 46px;
@@ -442,7 +694,7 @@ pre {
     align-items: start;
     justify-content: space-between;
     gap: 16px 24px;
-    padding-bottom: 14px;
+    padding-bottom: 18px;
     border-bottom: 1px solid rgb(23 34 40 / 0.08);
 }
 
@@ -466,8 +718,8 @@ pre {
     align-self: start;
     flex: 0 1 auto;
     max-width: 16rem;
-    min-height: 34px;
-    padding: 6px 14px;
+    min-height: 38px;
+    padding: 8px 14px;
     border: 1px solid rgb(23 34 40 / 0.12);
     border-radius: 999px;
     background: rgb(255 255 255 / 0.68);
@@ -481,17 +733,17 @@ pre {
 }
 
 .section > .section-head + * {
-    margin-top: 2px;
+    margin-top: 10px;
 }
 
 .section-deck {
-    max-width: 58ch;
-    margin-top: 10px;
+    max-width: 52ch;
+    margin-top: 8px;
     color: var(--ink-soft);
-    font-size: 1rem;
+    font-size: 0.98rem;
     font-weight: 500;
     letter-spacing: 0;
-    line-height: 1.65;
+    line-height: 1.55;
     text-transform: none;
 }
 
@@ -1162,7 +1414,12 @@ pre {
     .issue-layout,
     .disclosure-layout,
     .verification-layout,
+    .dashboard-summary,
+    .action-card-grid,
+    .wallet-layout,
     .privacy-grid,
+    .issue-technical-grid,
+    .privacy-advanced-grid,
     .chain-form,
     .registry-grid,
     .registry-details {
@@ -1206,12 +1463,20 @@ pre {
         border-radius: 22px;
     }
 
+    .workspace-nav-item {
+        min-height: 42px;
+        padding: 0 14px;
+    }
+
     .hero h1 {
         font-size: clamp(2.5rem, 13vw, 4rem);
     }
 
     .story-band,
-    .status-cards {
+    .status-cards,
+    .dashboard-summary,
+    .action-card-grid,
+    .wallet-layout {
         grid-template-columns: 1fr;
     }
 
@@ -1236,6 +1501,10 @@ pre {
     }
 
     .ui-button {
+        width: 100%;
+    }
+
+    .action-card-foot {
         width: 100%;
     }
 }

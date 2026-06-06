@@ -86,7 +86,8 @@ The system has three actors:
 │   ├── src/web/                   Browser DApp dashboard (issuer / holder / verifier)
 │   ├── src/demo/end-to-end.ts      Full happy-path + tamper / revocation tests
 │   ├── src/scripts/deploy-local.ts Standalone deploy to local Anvil
-│   └── tests/                      26 vitest unit tests, all passing
+│   ├── src/scripts/deploy-v2-local.ts V2 registry deploy + bootstrap for local live mode
+│   └── tests/                      131 vitest unit tests, all passing
 │
 ├── docs/                       Design rationale and user guides
 │   ├── DESIGN.md                   Detailed architecture & cryptographic choices
@@ -130,6 +131,31 @@ npm run web
 # open http://localhost:5173
 ```
 
+## CredentialTrust Live Demo V2
+
+Run the live local product mode backed by real deployed V2 contracts:
+
+```bash
+make setup
+make demo-v2
+```
+
+This command builds the V2 artifacts if needed, starts or reuses Anvil, deploys and
+bootstraps `IssuerRegistryV2` and `CredentialRegistryV2`, writes `app/data/chain-v2.json`,
+and launches the browser app with the Registry workspace prefilled.
+
+Manual fallback:
+
+```bash
+cd app
+anvil --host 0.0.0.0 --port 8545
+npm run deploy:v2-local
+npm run web -- --port 5176
+```
+
+The generated `app/data/chain-v2.json` is served by Vite at `/chain-v2.json` and is excluded
+from the submission package.
+
 Or from the project root:
 
 ```bash
@@ -146,7 +172,7 @@ The end-to-end demo walks through every requirement in the brief in 9 sections. 
 ## Test coverage
 
 - **23 / 23 Foundry contract tests pass** — including fuzz tests on the anchor + revoke roundtrip and Solidity-side Merkle proof verification.
-- **26 / 26 vitest unit tests pass** — covering Merkle proof correctness/tampering, ECC sign/recover/interop with ethers, end-to-end issuance + selective disclosure + tamper detection + on-chain status checks + holder-bound proof validation.
+- **131 / 131 vitest unit tests pass** — covering Merkle proof correctness/tampering, ECC sign/recover/interop with ethers, end-to-end issuance + selective disclosure + tamper detection + on-chain status checks + holder-bound proof validation.
 - **Browser production build passes** — the same TypeScript cryptography core bundles into the Vite DApp.
 
 ```
@@ -154,8 +180,8 @@ $ forge test
 23 tests passed; 0 failed; 0 skipped (fuzz: 256 runs/test)
 
 $ npm test
-Test Files  3 passed (3)
-     Tests  26 passed (26)
+Test Files  10 passed (10)
+     Tests  131 passed (131)
 
 $ npm run web:build
 ✓ built

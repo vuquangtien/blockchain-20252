@@ -25,7 +25,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "node:start": "anvil --silent &",
-    "deploy:local": "tsx src/scripts/deploy-local.ts"
+    "deploy:local": "tsx src/scripts/deploy-local.ts",
+    "deploy:v2-local": "node --import tsx src/scripts/deploy-v2-local.ts",
+    "demo:v2-live": "node --import tsx src/demo/v2-live.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.6.0",

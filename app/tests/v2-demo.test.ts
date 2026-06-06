@@ -7,6 +7,8 @@ import {
     derivePolicyState,
     summarizeClaimValue
 } from "../src/util/v2Demo.js";
+import {verifyPresentationV2} from "../src/core/v2/protocol.js";
+import {groupVerificationChecks} from "../src/util/webUi.js";
 
 describe("V2 Demo Helper", () => {
     it("derives an exact-match policy state for the required verifier claims", () => {
@@ -42,6 +44,24 @@ describe("V2 Demo Helper", () => {
         expect(scenario.credential.claimCount).toBe(8);
         expect(scenario.anchorKey).toMatch(/^0x[0-9a-f]{64}$/);
         expect(scenario.holderCommitment).toMatch(/^0x[0-9a-f]{64}$/);
+    });
+
+    it("keeps verification grouped into four categories across seventeen checks", async () => {
+        const scenario = createDemoScenario(DEMO_REQUIRED_CLAIMS);
+
+        expect(scenario.presentation).not.toBeNull();
+
+        const verification = await verifyPresentationV2(
+            scenario.presentation!,
+            scenario.request,
+            {
+                expectedAudience: "Capstone verification terminal",
+                expectedRequestDigest: scenario.requestDigest
+            }
+        );
+
+        expect(verification.checks).toHaveLength(17);
+        expect(groupVerificationChecks(verification.checks)).toHaveLength(4);
     });
 
     it("refuses to build a presentation when disclosure does not exactly match the request", () => {

@@ -1,4 +1,4 @@
-.PHONY: setup test build check demo gas web preview package clean audit smoke-check
+.PHONY: setup test build check demo demo-v2 gas web preview package clean audit smoke-check
 
 APP_DIR := app
 CONTRACTS_DIR := contracts
@@ -35,6 +35,9 @@ audit:
 
 demo:
 	cd $(APP_DIR) && npm run demo:full
+
+demo-v2:
+	cd $(APP_DIR) && npm run demo:v2-live
 
 gas:
 	cd $(CONTRACTS_DIR) && $(FORGE) snapshot

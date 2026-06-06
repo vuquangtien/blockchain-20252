@@ -2,6 +2,7 @@ import {describe, expect, it} from "vitest";
 
 import type {VerificationCheck} from "../src/core/v2/types.js";
 import {
+    DEMO_STORY_CARDS,
     claimLabel,
     formatClaimReadableValue,
     formatHiddenSummary,
@@ -45,6 +46,17 @@ describe("Web UI helpers", () => {
         expect(requiredClaimLabels()).toEqual(["Degree field", "GPA", "Thesis"]);
     });
 
+    it("keeps the dashboard role cards product-oriented", () => {
+        expect(DEMO_STORY_CARDS.map((card) => card.role)).toEqual([
+            "Student",
+            "University",
+            "Verifier",
+            "Blockchain"
+        ]);
+        expect(DEMO_STORY_CARDS[0]?.title).toBe("Holds the credential privately");
+        expect(DEMO_STORY_CARDS[3]?.body).toContain("registry state");
+    });
+
     it("groups verification checks into four human categories", () => {
         const checks: VerificationCheck[] = [
             {name: "issuer_signature", passed: true, code: "OK"},
@@ -60,7 +72,7 @@ describe("Web UI helpers", () => {
             "Credential integrity",
             "Student authorization",
             "Selective disclosure",
-            "Registry status"
+            "Registry compatibility"
         ]);
         expect(groups.every((group) => group.passed)).toBe(true);
     });

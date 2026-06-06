@@ -1,6 +1,7 @@
 import {defineConfig} from "vite";
 
 export default defineConfig({
+    publicDir: "data",
     server: {
         watch: {
             usePolling: true,

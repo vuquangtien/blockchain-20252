@@ -17,7 +17,7 @@ export const VERIFICATION_CATEGORY_LABELS = {
     credentialIntegrity: "Credential integrity",
     studentAuthorization: "Student authorization",
     selectiveDisclosure: "Selective disclosure",
-    registryStatus: "Registry status"
+    registryStatus: "Registry compatibility"
 } as const;
 
 export type VerificationCategory = keyof typeof VERIFICATION_CATEGORY_LABELS;
@@ -46,23 +46,23 @@ const CHECK_CATEGORY_MAP: Record<string, VerificationCategory> = {
 export const DEMO_STORY_CARDS = [
     {
         role: "Student",
-        title: "Owns a private academic credential",
-        body: "The student holds a full transcript with eight academic facts, but chooses what to share."
+        title: "Holds the credential privately",
+        body: "Chooses what to reveal, one proof at a time."
     },
     {
         role: "University",
-        title: "Signs the credential",
-        body: "Hanoi University of Science and Technology issues and cryptographically signs the record."
+        title: "Signs the record",
+        body: "Issues the credential and keeps authority in the registry."
     },
     {
         role: "Verifier",
-        title: "Asks for only three facts",
-        body: "The verifier requests degree field, GPA, and thesis — nothing else."
+        title: "Requests only what it needs",
+        body: "Checks the proof without seeing the full transcript."
     },
     {
         role: "Blockchain",
-        title: "Checks issuer and revocation status",
-        body: "An on-chain registry confirms the issuer is authorized and the credential is not revoked."
+        title: "Confirms trust and revocation",
+        body: "Reads registry state before accepting the proof."
     }
 ] as const;
 
