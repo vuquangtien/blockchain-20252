@@ -43,5 +43,5 @@ Fallback if the dev server has watcher issues:
 cd app
 npm run web:build
 npm run web:preview -- --port 4173
-# open http://localhost:4173
+# open the printed preview URL
 ```

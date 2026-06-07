@@ -16,7 +16,7 @@ make demo-v2
 2. start or reuse a local Anvil RPC at `http://127.0.0.1:8545`,
 3. deploy `IssuerRegistryV2` and `CredentialRegistryV2`,
 4. register the demo university organization, and
-5. start the browser app with the Registry workspace prefilled.
+5. start the browser app with the Blockchain Registry portal prefilled.
 
 The command prints a product URL that includes query parameters for the live registry
 addresses, so opening that link lands directly in live local mode.

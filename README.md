@@ -13,13 +13,22 @@ A complete, working implementation of a decentralized academic-credential platfo
 | On-chain registry of authorized issuers | [`IssuerRegistry.sol`](contracts/src/IssuerRegistry.sol) |
 | On-chain revocation list for invalid credentials | [`CredentialRegistry.sol`](contracts/src/CredentialRegistry.sol) |
 | Functional, end-to-end DApp | [Issuer CLI](app/src/issuer/cli.ts), [Holder CLI](app/src/holder/cli.ts), [Verifier CLI](app/src/verifier/cli.ts), [E2E demo](app/src/demo/end-to-end.ts) |
-| Browser frontend integration | [Vite DApp dashboard](app/src/web/main.ts) with live ECC, Merkle, and local-chain verification |
+| Browser frontend integration | [Vite role-based portal UI](app/src/web/main.ts) with live ECC, Merkle, and local-chain verification |
 
-The system has three actors:
+The core protocol has three primary actors:
 
 - **Issuer** — a university registered on-chain by the system administrator. Issues, anchors, and revokes credentials.
 - **Holder** — a student who custody-holds their full credential off-chain and creates redacted *presentations*.
 - **Verifier** — any third party (employer, government, another university) that checks a presentation against the on-chain registries.
+
+The browser product presents separate portals for:
+
+- **Dashboard**
+- **University Portal**
+- **Student Wallet**
+- **Verifier Portal**
+- **Blockchain Registry**
+- **Technical Evidence**
 
 ## High-level architecture
 
@@ -68,7 +77,7 @@ The system has three actors:
 │   │   ├── IssuerRegistry.sol      (authorized issuers, owner-controlled)
 │   │   ├── CredentialRegistry.sol  (Merkle-root anchors + revocation list)
 │   │   └── IIssuerRegistry.sol     (interface)
-│   ├── test/                       (23 Foundry tests, all passing)
+│   ├── test/                       (70 Foundry tests, all passing)
 │   └── script/Deploy.s.sol         (Foundry deployment script)
 │
 ├── app/                        TypeScript off-chain implementation
@@ -83,22 +92,22 @@ The system has three actors:
 │   ├── src/issuer/cli.ts           Issuer CLI (university)
 │   ├── src/holder/cli.ts           Holder CLI (student)
 │   ├── src/verifier/cli.ts         Verifier CLI (third party)
-│   ├── src/web/                   Browser DApp dashboard (issuer / holder / verifier)
+│   ├── src/web/                   Browser role-based portals (dashboard / university / student / verifier / registry / evidence)
 │   ├── src/demo/end-to-end.ts      Full happy-path + tamper / revocation tests
 │   ├── src/scripts/deploy-local.ts Standalone deploy to local Anvil
 │   ├── src/scripts/deploy-v2-local.ts V2 registry deploy + bootstrap for local live mode
-│   └── tests/                      131 vitest unit tests, all passing
+│   └── tests/                      137 Vitest unit tests, all passing
 │
 ├── docs/                       Design rationale and user guides
 │   ├── DESIGN.md                   Detailed architecture & cryptographic choices
-│   ├── USAGE.md                    Step-by-step CLI walkthrough
+│   ├── USAGE.md                    CLI walkthrough
 │   ├── SECURITY.md                 Threat model & known limitations
 │   ├── GRADING.md                  Rubric-to-evidence map
 │   ├── PRESENTATION.md             5-minute demo script + defense Q&A
-│   ├── PRESENTATION_RUNBOOK.md     Detailed 7-10 minute presentation script and fallback plan
-│   ├── DEFENSE_QA.md               Teacher Q&A defense document
+│   ├── SETUP_FOR_GRADING.md        Teacher setup and grading guide
+│   ├── DEMO_GUIDE.md               Student live demo guide
 │   ├── SUBMISSION_CHECKLIST.md     Final commands before submission
-│   ├── evaluation/                 Per-rubric full-score guides & FINAL_GRADING_TRACE.md
+│   ├── evaluation/                 Per-rubric full-score guides
 │   └── REPORT.md                   Capstone-style technical report
 │
 ├── Makefile                    One-command check/demo/package helpers
@@ -128,7 +137,7 @@ npm run demo
 # 5. Or play with the CLIs by hand:
 #    See docs/USAGE.md for a complete walkthrough.
 
-# 6. Launch the browser dashboard:
+# 6. Launch the browser portals:
 npm run web
 # open the printed local URL
 ```
@@ -144,7 +153,7 @@ make demo-v2
 
 This command builds the V2 artifacts if needed, starts or reuses Anvil, deploys and
 bootstraps `IssuerRegistryV2` and `CredentialRegistryV2`, writes `app/data/chain-v2.json`,
-and launches the browser app with the Registry workspace prefilled.
+and launches the browser app with the Blockchain Registry portal prefilled.
 
 Manual fallback:
 
@@ -164,26 +173,31 @@ Or from the project root:
 make check       # Solidity formatting, tests, vitest unit tests, CLI + Web builds
 make audit       # npm audit (network-dependent)
 make demo        # full local Anvil demo
-make web         # browser dashboard
+make web         # browser role-based portals
 make package     # creates a clean submission zip (includes pinned/vendored Solidity dependencies; npm ci requires registry access or populated npm cache)
 make smoke-check # packages the zip, extracts it to a temp dir, runs setup + check to verify reproducibility
 ```
 
 The end-to-end demo walks through every requirement in the brief in 9 sections. Sample output is shown in [docs/USAGE.md](docs/USAGE.md#end-to-end-demo).
 
+## Final handoff guides
+
+- [Teacher setup and grading guide](docs/SETUP_FOR_GRADING.md)
+- [Student live demo guide](docs/DEMO_GUIDE.md)
+
 ## Test coverage
 
 - **70 / 70 Foundry contract tests pass** — including fuzz tests on the V2 issuer/registry lifecycle and Solidity-side Merkle proof verification.
-- **135 / 135 vitest unit tests pass** — covering Merkle proof correctness/tampering, ECC sign/recover/interop with ethers, end-to-end issuance + selective disclosure + tamper detection, on-chain status checks, and holder-bound proof validation.
+- **137 / 137 Vitest unit tests pass** — covering Merkle proof correctness/tampering, ECC sign/recover/interop with ethers, end-to-end issuance + selective disclosure + tamper detection, on-chain status checks, role-portal UI flow, and holder-bound proof validation.
 - **Browser production build passes** — the same TypeScript cryptography core bundles into the Vite DApp.
 
 ```
 $ forge test
-23 tests passed; 0 failed; 0 skipped (fuzz: 256 runs/test)
+70 tests passed; 0 failed; 0 skipped
 
 $ npm test
-Test Files  10 passed (10)
-     Tests  131 passed (131)
+Test Files  11 passed (11)
+     Tests  137 passed (137)
 
 $ npm run web:build
 ✓ built
@@ -192,7 +206,7 @@ $ cd ../contracts && forge snapshot
 contracts/.gas-snapshot updated
 ```
 
-For the grading narrative, read [docs/GRADING.md](docs/GRADING.md) and the final [FINAL_GRADING_TRACE.md](docs/evaluation/FINAL_GRADING_TRACE.md). For the presentation runbook, see [PRESENTATION_RUNBOOK.md](docs/PRESENTATION_RUNBOOK.md) and the [DEFENSE_QA.md](docs/DEFENSE_QA.md) sheet. For detailed full-score strategy per rubric category, read [docs/evaluation/00_INDEX.md](docs/evaluation/00_INDEX.md). For the final pre-submission checklist, read [docs/SUBMISSION_CHECKLIST.md](docs/SUBMISSION_CHECKLIST.md).
+For the technical background, read [docs/GRADING.md](docs/GRADING.md), [docs/REPORT.md](docs/REPORT.md), and [docs/SECURITY.md](docs/SECURITY.md). For detailed full-score strategy per rubric category, read [docs/evaluation/00_INDEX.md](docs/evaluation/00_INDEX.md). For the final pre-submission checklist, read [docs/SUBMISSION_CHECKLIST.md](docs/SUBMISSION_CHECKLIST.md).
 
 ## Key design decisions (read [docs/DESIGN.md](docs/DESIGN.md) for the full reasoning)
 
