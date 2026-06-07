@@ -35,7 +35,8 @@ make web
 Expected talking point:
 
 ```text
-make check runs Foundry formatting/tests, TypeScript unit tests, CLI build, browser build, and npm audit.
+make check runs Foundry formatting/tests, TypeScript unit tests, CLI build, and browser build.
+make audit runs npm audit separately.
 make demo starts Anvil automatically and runs the full credential lifecycle.
 make web opens a browser dashboard using the same cryptographic core as the CLI.
 ```
@@ -51,7 +52,7 @@ make check
 Say:
 
 ```text
-The contract suite has 23 tests covering issuer registration, revocation, credential anchoring, expiry, zero-value rejection, unauthorized callers, and Solidity-side Merkle proof verification. The app has 26 TypeScript tests for ECC, Merkle proofs, credential issuance, holder nonce binding, and tamper detection.
+The contract suite has 70 tests covering issuer registration, revocation, credential anchoring, expiry, zero-value rejection, unauthorized callers, and Solidity-side Merkle proof verification. The app has 135 TypeScript tests for ECC, Merkle proofs, credential issuance, holder nonce binding, and tamper detection.
 ```
 
 ### 2. Run end-to-end flow
@@ -78,7 +79,7 @@ Point out these 9 phases:
 make web
 ```
 
-Open `http://localhost:5173`.
+Open the printed local URL.
 
 Show:
 
@@ -86,8 +87,8 @@ Show:
 - Select only some claims.
 - Hidden claim count changes.
 - Merkle proof path appears.
-- Offline verification succeeds.
-- If Anvil is running and addresses are pasted, chain verification succeeds.
+- Local cryptographic checks succeed in-browser.
+- If Anvil is running and addresses are configured, chain verification succeeds.
 
 ## What To Say To Impress
 
