@@ -60,9 +60,14 @@ export const DEMO_STORY_CARDS = [
         body: "Checks the proof without seeing the full transcript."
     },
     {
-        role: "Blockchain",
-        title: "Confirms trust and revocation",
-        body: "Reads registry state before accepting the proof."
+        role: "Registry / Admin",
+        title: "Confirms issuer authority",
+        body: "Anchors credentials and tracks revocation status."
+    },
+    {
+        role: "Technical reviewer",
+        title: "Inspects the evidence trail",
+        body: "Reviews digests, proofs, and signatures for grading."
     }
 ] as const;
 

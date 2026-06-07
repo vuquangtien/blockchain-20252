@@ -1,4 +1,4 @@
-export const DEMO_STEP_IDS = [
+export const ROLE_PORTAL_IDS = [
     "overview",
     "issue",
     "reveal",
@@ -7,10 +7,10 @@ export const DEMO_STEP_IDS = [
     "privacy"
 ] as const;
 
-export type DemoStepId = (typeof DEMO_STEP_IDS)[number];
+export type PortalId = (typeof ROLE_PORTAL_IDS)[number];
 
-export interface DemoStepDefinition {
-    id: DemoStepId;
+export interface RolePortalDefinition {
+    id: PortalId;
     label: string;
     title: string;
     description: string;
@@ -20,91 +20,80 @@ export interface DemoStepDefinition {
     advancedHiddenByDefault?: boolean;
 }
 
-export const DEMO_STEPS: DemoStepDefinition[] = [
+export const ROLE_PORTALS: RolePortalDefinition[] = [
     {
         id: "overview",
         label: "Dashboard",
-        title: "Operations console for issuing, sharing, verifying, and registry checks.",
-        description: "Pick one workspace to continue the credential flow.",
-        actionLabel: "Issue credential",
-        roleLabel: "Operations console",
-        resultLabel: "One clear action per workspace"
+        title: "Choose a role.",
+        description: "Enter one actor's portal and run only that actor's job.",
+        actionLabel: "Choose role",
+        roleLabel: "Dashboard",
+        resultLabel: "Transcript private by default"
     },
     {
         id: "issue",
-        label: "University Issuer",
-        title: "University creates and signs a credential.",
-        description: "Issue a signed record the student can hold.",
-        actionLabel: "Issue credential",
-        roleLabel: "University issuer",
+        label: "University Portal",
+        title: "Issue the credential.",
+        description: "Sign the academic record once and send it to the student.",
+        actionLabel: "Sign credential",
+        roleLabel: "University",
         resultLabel: "Signed credential ready"
     },
     {
         id: "reveal",
         label: "Student Wallet",
-        title: "Student chooses what to reveal from the wallet.",
-        description: "Share only the facts the verifier asked for.",
-        actionLabel: "Share proof",
-        roleLabel: "Student wallet",
-        resultLabel: "Revealed facts only"
+        title: "Create a private proof.",
+        description: "Reveal only the facts requested by the verifier.",
+        actionLabel: "Create proof",
+        roleLabel: "Student",
+        resultLabel: "Only required facts disclosed"
     },
     {
         id: "verify",
         label: "Verifier Portal",
-        title: "Verifier checks the submitted proof against the request.",
-        description: "Accepted or rejected appears with grouped checks.",
+        title: "Verify the proof.",
+        description: "Accept or reject without seeing the full transcript.",
         actionLabel: "Verify proof",
-        roleLabel: "Verifier portal",
-        resultLabel: "Proof verdict"
+        roleLabel: "Verifier",
+        resultLabel: "Decision with grouped checks"
     },
     {
         id: "blockchain",
         label: "Blockchain Registry",
-        title: "Registry confirms issuer authority and revocation state.",
-        description: "Refresh live chain status on demand.",
+        title: "Check public trust state.",
+        description: "Read issuer authority, anchoring, and revocation.",
         actionLabel: "Check registry",
-        roleLabel: "Blockchain registry",
-        resultLabel: "Live chain status"
+        roleLabel: "Registry/Admin",
+        resultLabel: "Issuer and revocation state"
     },
     {
         id: "privacy",
-        label: "Evidence / Advanced",
-        title: "Technical evidence, signatures, and proof material for grading.",
-        description: "Advanced details stay collapsed until opened.",
-        actionLabel: "View evidence",
-        roleLabel: "Evidence vault",
-        resultLabel: "Hashes, proofs, and checks",
+        label: "Technical Evidence",
+        title: "Inspect the evidence.",
+        description: "Open hashes, signatures, Merkle paths, and registry bindings.",
+        actionLabel: "Review evidence",
+        roleLabel: "Technical reviewer",
+        resultLabel: "Technical details hidden by default",
         advancedHiddenByDefault: true
     }
 ] as const;
 
-export function getDemoStepIndex(stepId: DemoStepId): number {
-    return DEMO_STEP_IDS.indexOf(stepId);
+export function getPortalIndex(portalId: PortalId): number {
+    return ROLE_PORTAL_IDS.indexOf(portalId);
 }
 
-export function getDemoStepByIndex(index: number): DemoStepDefinition {
-    return DEMO_STEPS[Math.max(0, Math.min(DEMO_STEPS.length - 1, index))]!;
+export function getPortalByIndex(index: number): RolePortalDefinition {
+    return ROLE_PORTALS[Math.max(0, Math.min(ROLE_PORTALS.length - 1, index))]!;
 }
 
-export function getWorkspaceMeta(stepId: DemoStepId): DemoStepDefinition {
-    return DEMO_STEPS[getDemoStepIndex(stepId)]!;
+export function getPortalMeta(portalId: PortalId): RolePortalDefinition {
+    return ROLE_PORTALS[getPortalIndex(portalId)]!;
 }
 
-export function getDemoStepProgress(stepId: DemoStepId): string {
-    const index = getDemoStepIndex(stepId);
-    return `Workspace ${index + 1} of ${DEMO_STEPS.length} · ${getDemoStepByIndex(index).label}`;
+export function getPortalStatus(activePortal: PortalId, portalId: PortalId): "active" | "inactive" {
+    return activePortal === portalId ? "active" : "inactive";
 }
 
-export function getDemoStepStatus(activeStep: DemoStepId, stepId: DemoStepId): "completed" | "current" | "pending" {
-    const activeIndex = getDemoStepIndex(activeStep);
-    const stepIndex = getDemoStepIndex(stepId);
-
-    if (stepIndex < activeIndex) return "completed";
-    if (stepIndex === activeIndex) return "current";
-    return "pending";
-}
-
-export function getNextDemoStep(stepId: DemoStepId): DemoStepId {
-    const nextIndex = getDemoStepIndex(stepId) + 1;
-    return getDemoStepByIndex(nextIndex).id;
+export function getPortalLabel(portalId: PortalId): string {
+    return getPortalMeta(portalId).label;
 }

@@ -51,10 +51,12 @@ describe("Web UI helpers", () => {
             "Student",
             "University",
             "Verifier",
-            "Blockchain"
+            "Registry / Admin",
+            "Technical reviewer"
         ]);
         expect(DEMO_STORY_CARDS[0]?.title).toBe("Holds the credential privately");
-        expect(DEMO_STORY_CARDS[3]?.body).toContain("registry state");
+        expect(DEMO_STORY_CARDS[3]?.body).toContain("revocation status");
+        expect(DEMO_STORY_CARDS[4]?.body).toContain("signatures");
     });
 
     it("groups verification checks into four human categories", () => {

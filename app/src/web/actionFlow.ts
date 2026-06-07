@@ -1,9 +1,9 @@
-import type {DemoStepId} from "./demoSteps.js";
+import type {PortalId} from "./demoSteps.js";
 
 export type ChainActionName = "refresh-chain" | "register-org" | "anchor" | "revoke" | "suspend";
 
 export interface ActionPlan {
-    nextStep?: DemoStepId;
+    nextPortal?: PortalId;
     chainAction?: ChainActionName;
     openAdvancedChain?: boolean;
     rerunVerification?: boolean;
@@ -17,20 +17,28 @@ export interface ActionPlan {
 
 export function getActionLabel(action: string): string {
     switch (action) {
-        case "start-demo":
+        case "open-university":
+            return "Enter University Portal";
+        case "open-student":
+            return "Send to Student Wallet";
+        case "open-verifier":
+            return "Send to Verifier Portal";
+        case "open-registry":
+            return "Check Blockchain Registry";
+        case "open-technical":
+            return "Open Technical Evidence";
         case "issue":
-            return "Issue credential";
+            return "Sign credential";
         case "reveal":
-            return "Share proof";
+            return "Create proof";
         case "verify":
             return "Verify proof";
         case "refresh-chain":
+            return "Refresh blockchain status";
         case "check-chain":
             return "Check registry";
         case "set-up-chain":
             return "Open advanced setup";
-        case "continue-to-privacy":
-            return "View evidence";
         case "register-org":
             return "Register organization";
         case "anchor":
@@ -40,7 +48,7 @@ export function getActionLabel(action: string): string {
         case "suspend":
             return "Suspend issuer";
         case "restart-demo":
-            return "Open dashboard";
+            return "Back to Dashboard";
         default:
             return action;
     }
@@ -48,48 +56,53 @@ export function getActionLabel(action: string): string {
 
 export function planAction(action: string, chainConfigured: boolean): ActionPlan {
     switch (action) {
+        case "open-university":
+            return {
+                nextPortal: "issue"
+            };
+        case "open-student":
+            return {
+                nextPortal: "reveal"
+            };
+        case "open-verifier":
+            return {
+                nextPortal: "verify"
+            };
+        case "open-registry":
+            return {
+                nextPortal: "blockchain"
+            };
+        case "open-technical":
+            return {
+                nextPortal: "privacy"
+            };
         case "restart-demo":
             return {
-                nextStep: "overview",
+                nextPortal: "overview",
                 refreshScenario: true,
                 refreshTimestamps: true,
                 noticeKind: "ok",
                 noticeText: "Returned to the dashboard."
             };
-        case "start-demo":
-            return {
-                nextStep: "issue"
-            };
         case "issue":
             return {
-                nextStep: "reveal",
                 refreshScenario: true,
                 refreshTimestamps: true,
-                rerunVerification: true,
                 noticeKind: "ok",
-                noticeText: "A fresh credential was issued with updated timestamps."
+                noticeText: "Credential signed. Send it to the student wallet when ready."
             };
         case "reveal":
-        case "match-policy":
             return {
-                nextStep: "verify",
-                resetClaimsToRequired: true,
-                rerunVerification: true,
                 noticeKind: "ok",
-                noticeText: "The wallet is ready to share the requested facts."
+                noticeText: "Proof created. Hidden transcript facts stay inside the student wallet."
             };
         case "verify":
             return {
-                nextStep: "blockchain",
                 rerunVerification: true
-            };
-        case "continue-to-privacy":
-            return {
-                nextStep: "privacy"
             };
         case "set-up-chain":
             return {
-                nextStep: "blockchain",
+                nextPortal: "blockchain",
                 openAdvancedChain: true,
                 noticeKind: "ok",
                 noticeText: "Open advanced setup to enter the RPC URL and contract addresses."

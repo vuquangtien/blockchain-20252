@@ -30,16 +30,14 @@ import {
     type DemoScenario
 } from "../util/v2Demo.js";
 import {
-    DEMO_STEPS,
-    type DemoStepId,
-    getDemoStepIndex,
-    getDemoStepStatus,
-    getWorkspaceMeta
+    ROLE_PORTALS,
+    type PortalId,
+    getPortalMeta,
+    getPortalStatus
 } from "./demoSteps.js";
 import {getActionLabel, planAction} from "./actionFlow.js";
 import {DEFAULT_UI_TOGGLES, type UiToggles} from "./uiState.js";
 import {
-    DEMO_STORY_CARDS,
     claimLabel,
     formatClaimReadableValue,
     formatHiddenSummary,
@@ -72,7 +70,7 @@ interface AppNotice {
 }
 
 interface AppState {
-    activeStep: DemoStepId;
+    activePortal: PortalId;
     selectedClaims: Set<string>;
     scenario: DemoScenario;
     verification?: VerificationResultV2;
@@ -92,7 +90,7 @@ const storedChain = pickChainInputs(
 );
 
 const state: AppState = {
-    activeStep: "overview",
+    activePortal: "overview",
     selectedClaims: new Set(DEMO_REQUIRED_CLAIMS),
     scenario: createDemoScenario(DEMO_REQUIRED_CLAIMS),
     verificationRan: false,
@@ -120,7 +118,6 @@ async function primeDemo(): Promise<void> {
     });
 
     state.chainInputs = resolved.inputs;
-    await runVerification();
     render();
 }
 
@@ -192,12 +189,29 @@ function setNotice(kind: AppNotice["kind"], text: string): void {
     state.notice = {kind, text};
 }
 
-function setActiveStep(step: DemoStepId): void {
-    state.activeStep = step;
+function setActivePortal(portal: PortalId): void {
+    state.activePortal = portal;
+}
+
+function getRoleHeadline(portal: PortalId): string {
+    switch (portal) {
+        case "overview":
+            return "Dashboard";
+        case "issue":
+            return "University";
+        case "reveal":
+            return "Student";
+        case "verify":
+            return "Verifier";
+        case "blockchain":
+            return "Registry/Admin";
+        case "privacy":
+            return "Technical reviewer";
+    }
 }
 
 function resetDemo(): void {
-    state.activeStep = "overview";
+    state.activePortal = "overview";
     state.selectedClaims = new Set(DEMO_REQUIRED_CLAIMS);
     state.proofFocusKey = DEMO_REQUIRED_CLAIMS[0];
     state.toggles = {...DEFAULT_UI_TOGGLES};
@@ -307,19 +321,20 @@ async function refreshChainSnapshot(txHash?: string): Promise<void> {
     state.chainSnapshot = snapshot;
 }
 
-function renderWorkspaceNav(): string {
+function renderPortalNav(): string {
     return `
-        <nav class="workspace-nav" aria-label="Product areas">
-            ${DEMO_STEPS.map((step) => {
-                const status = getDemoStepStatus(state.activeStep, step.id);
+        <nav class="role-switcher" aria-label="Role portals">
+            ${ROLE_PORTALS.map((portal) => {
+                const status = getPortalStatus(state.activePortal, portal.id);
                 return `
                     <button
                         type="button"
-                        class="workspace-nav-item ${status}"
-                        data-step-id="${step.id}"
-                        aria-current="${status === "current" ? "page" : "false"}"
+                        class="role-tab ${status}"
+                        data-portal-id="${portal.id}"
+                        aria-current="${status === "active" ? "page" : "false"}"
                     >
-                        <strong>${escapeHtml(step.label)}</strong>
+                        <span>${escapeHtml(portal.roleLabel)}</span>
+                        <strong>${escapeHtml(portal.label)}</strong>
                     </button>
                 `;
             }).join("")}
@@ -327,57 +342,27 @@ function renderWorkspaceNav(): string {
     `;
 }
 
-function renderStepShell(): string {
-    const activeStep = getWorkspaceMeta(state.activeStep);
+function renderPortalShell(): string {
     const modeLabel = getProductModeLabel(state.chainInputs);
 
     return `
-        <header class="hero product-shell">
-            <div class="hero-copy">
-                <p class="eyebrow">CredentialTrust</p>
-                <h1>Credential operations console</h1>
-                <p class="hero-text demo-shell-text">
-                    ${escapeHtml(activeStep.description)}
-                </p>
-                <div class="hero-actions">
-                    ${state.activeStep === "overview"
-                        ? `<span class="sample-badge">${escapeHtml(modeLabel)}</span>`
-                        : renderButton(getActionForStep(state.activeStep), {variant: "primary"})}
-                    ${state.activeStep === "overview" ? "" : `<span class="sample-badge">${escapeHtml(modeLabel)}</span>`}
+        <header class="app-header">
+            <div class="topbar">
+                <button type="button" class="brand-button" data-portal-id="overview" aria-label="Open dashboard">
+                    <span class="brand-mark">CT</span>
+                    <span>
+                        <strong>CredentialTrust</strong>
+                        <small>Academic credentials with selective disclosure</small>
+                    </span>
+                </button>
+                <div class="topbar-status">
+                    <span>${escapeHtml(modeLabel)}</span>
+                    <strong>${escapeHtml(getPortalMeta(state.activePortal).label)}</strong>
                 </div>
             </div>
-            <aside class="hero-rail product-shell-rail">
-                <div class="metric-block">
-                    <span>You are</span>
-                    <strong>${escapeHtml(activeStep.roleLabel)}</strong>
-                    <p class="hero-note">${escapeHtml(activeStep.title)}</p>
-                </div>
-                <div class="metric-block metric-block-light">
-                    <span>Primary action</span>
-                    <strong>${escapeHtml(activeStep.actionLabel)}</strong>
-                    <p class="hero-note">${escapeHtml(activeStep.resultLabel)}</p>
-                </div>
-                ${renderWorkspaceNav()}
-            </aside>
+            ${renderPortalNav()}
         </header>
     `;
-}
-
-function getActionForStep(step: DemoStepId): string {
-    switch (step) {
-        case "overview":
-            return "start-demo";
-        case "issue":
-            return "issue";
-        case "reveal":
-            return "reveal";
-        case "verify":
-            return "verify";
-        case "blockchain":
-            return isChainConfigured() ? "refresh-chain" : "set-up-chain";
-        case "privacy":
-            return "restart-demo";
-    }
 }
 
 function renderToggle(
@@ -404,11 +389,12 @@ function isBusy(action: string): boolean {
 
 function renderButton(
     action: string,
-    options: {variant?: "primary" | "secondary" | "ghost" | "danger"; disabled?: boolean} = {}
+    options: {variant?: "primary" | "secondary" | "ghost" | "danger"; disabled?: boolean; label?: string} = {}
 ): string {
     const variant = options.variant ?? "secondary";
     const disabled = options.disabled || Boolean(state.busyAction);
     const loading = isBusy(action);
+    const label = options.label ?? getActionLabel(action);
 
     return `
         <button
@@ -418,27 +404,57 @@ function renderButton(
             ${disabled ? "disabled" : ""}
             aria-busy="${loading ? "true" : "false"}"
         >
-            <span class="button-face">${escapeHtml(loading ? `${getActionLabel(action)}...` : getActionLabel(action))}</span>
+            <span class="button-face">${escapeHtml(loading ? `${label}...` : label)}</span>
         </button>
     `;
 }
 
-function renderActionCard(
-    title: string,
-    description: string,
-    action: string,
-    options: {variant?: "primary" | "secondary" | "ghost" | "danger"; badge?: string; disabled?: boolean} = {}
+function renderPortalHeader(
+    portal: PortalId,
+    options: {kicker: string; title: string; subtitle: string; status: string}
 ): string {
     return `
-        <article class="action-card">
-            <div class="action-card-copy">
-                ${options.badge ? `<span class="action-card-badge">${escapeHtml(options.badge)}</span>` : ""}
-                <strong>${escapeHtml(title)}</strong>
+        <div class="portal-header">
+            <div>
+                <p class="portal-kicker">${escapeHtml(options.kicker)}</p>
+                <h1>${escapeHtml(options.title)}</h1>
+                <p>${escapeHtml(options.subtitle)}</p>
+            </div>
+            <aside class="portal-state-card">
+                <span>${escapeHtml(getRoleHeadline(portal))}</span>
+                <strong>${escapeHtml(options.status)}</strong>
+                <small>${escapeHtml(getPortalMeta(portal).resultLabel)}</small>
+            </aside>
+        </div>
+    `;
+}
+
+function renderMetricTile(label: string, value: string | number, description: string, tone: "good" | "neutral" | "warn" = "neutral"): string {
+    return `
+        <article class="metric-tile ${tone}">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+            <p>${escapeHtml(description)}</p>
+        </article>
+    `;
+}
+
+function renderPortalCard(
+    portal: PortalId,
+    description: string,
+    action: string,
+    label: string
+): string {
+    const meta = getPortalMeta(portal);
+
+    return `
+        <article class="portal-card portal-card-${portal}">
+            <div>
+                <span>${escapeHtml(meta.roleLabel)}</span>
+                <strong>${escapeHtml(meta.label)}</strong>
                 <p>${escapeHtml(description)}</p>
             </div>
-            <div class="action-card-foot">
-                ${renderButton(action, {variant: options.variant ?? "secondary", disabled: options.disabled})}
-            </div>
+            ${renderButton(action, {variant: portal === "overview" ? "ghost" : "secondary", label})}
         </article>
     `;
 }
@@ -448,7 +464,7 @@ function renderVerificationSummary(): string {
         return `
             <div class="empty-state">
                 <strong>No proof prepared yet</strong>
-                <p>${escapeHtml(state.scenario.presentationError ?? "Share proof from the wallet, then verify it here.")}</p>
+                <p>${escapeHtml(state.scenario.presentationError ?? "Create a proof from the Student Wallet, then verify it here.")}</p>
             </div>
         `;
     }
@@ -472,8 +488,8 @@ function renderVerificationSummary(): string {
                 <strong>${state.verification.valid ? "Accepted" : "Rejected"}</strong>
                 <p class="verdict-summary">
                     ${state.verification.valid
-                        ? "The proof matches the request and the registry checks passed."
-                        : "Open Evidence for the failing check."}
+                        ? "The proof matches the request and the cryptographic checks passed."
+                        : "Open Technical Evidence for the failing check."}
                 </p>
             </div>
             <div class="category-list">
@@ -523,7 +539,7 @@ function renderProofPanel(): string {
         return `
             <div class="empty-state">
                 <strong>Proof not available yet</strong>
-                <p>Share proof from the wallet first.</p>
+                <p>Create a proof from the Student Wallet first.</p>
             </div>
         `;
     }
@@ -736,8 +752,6 @@ function renderChainPanel(): string {
     const snapshot = state.chainSnapshot;
     const helpPanel = renderChainHelpPanel();
     const primaryAction = chainReady ? "refresh-chain" : "set-up-chain";
-    const primaryDisabled = false;
-    const chainDisabled = !chainReady;
 
     return `
         <div class="chain-flow">
@@ -751,12 +765,12 @@ function renderChainPanel(): string {
                 ${renderChainStatusCards(snapshot)}
             </div>
             <div class="chain-primary-actions">
-                ${renderButton(primaryAction, {variant: "primary", disabled: primaryDisabled})}
-                ${renderButton("continue-to-privacy", {variant: "ghost"})}
+                ${renderButton(primaryAction, {variant: "primary", label: chainReady ? "Check registry now" : "Connect local registry"})}
+                ${renderButton("open-technical", {variant: "secondary"})}
             </div>
             ${helpPanel}
             <div class="chain-advanced-toggle">
-                ${renderToggle("showAdvancedChain", "Advanced local chain setup")}
+                ${renderToggle("showAdvancedChain", "Local chain setup and admin controls")}
             </div>
             ${state.toggles.showAdvancedChain ? `
                 <div class="chain-advanced nested-band">
@@ -786,12 +800,16 @@ function renderChainPanel(): string {
                             />
                         </label>
                     </div>
-                    <div class="action-cluster">
-                        ${renderButton("register-org", {disabled: chainDisabled})}
-                        ${renderButton("anchor", {disabled: chainDisabled})}
-                        ${renderButton("revoke", {variant: "danger", disabled: chainDisabled})}
-                        ${renderButton("suspend", {variant: "ghost", disabled: chainDisabled})}
-                    </div>
+                    ${chainReady ? `
+                        <div class="action-cluster">
+                            ${renderButton("register-org")}
+                            ${renderButton("anchor")}
+                            ${renderButton("revoke", {variant: "danger"})}
+                            ${renderButton("suspend", {variant: "ghost"})}
+                        </div>
+                    ` : `
+                        <p class="chain-note">Enter the RPC URL and contract addresses first, then the registry actions become available.</p>
+                    `}
                     <p class="chain-note">
                         ${escapeHtml(
                             `${DEMO_ROLE_COPY.registerOrganization} ${DEMO_ROLE_COPY.suspendOrganization} ${DEMO_ROLE_COPY.anchorCredential} ${DEMO_ROLE_COPY.revokeCredential} ${DEMO_ROLE_COPY.organizationAdministration}`
@@ -875,84 +893,47 @@ function renderChainPanel(): string {
 
 function renderOverviewStep(): string {
     const modeLabel = getProductModeLabel(state.chainInputs);
-    const currentMeta = getWorkspaceMeta(state.activeStep);
 
     return `
-        <section class="section demo-step">
-            <div class="section-head">
+        <section class="dashboard-screen">
+            <div class="dashboard-hero">
                 <div>
-                    <p>Dashboard</p>
-                    <h2>Issue, share, verify, or check registry status.</h2>
-                    <p class="section-deck">Pick one workspace and move the flow forward.</p>
+                    <p class="portal-kicker">Product dashboard</p>
+                    <h1>Choose a role. Run one job at a time.</h1>
+                    <p>
+                        CredentialTrust separates the university, student, verifier, registry, and technical reviewer into their own portals.
+                    </p>
                 </div>
-                <span>${escapeHtml(modeLabel)}</span>
+                <aside class="dashboard-privacy-card">
+                    <span>${escapeHtml(modeLabel)}</span>
+                    <strong>Private transcript stays in the student wallet.</strong>
+                    <p>Only selected facts and cryptographic proof material leave the holder.</p>
+                </aside>
             </div>
-            <div class="dashboard-layout">
-                <div class="dashboard-summary">
-                    <article class="status-card good">
-                        <span>You are</span>
-                        <strong>${escapeHtml(currentMeta.roleLabel)}</strong>
-                        <p>${escapeHtml(currentMeta.title)}</p>
-                    </article>
-                    <article class="status-card good">
-                        <span>Primary action</span>
-                        <strong>${escapeHtml(currentMeta.actionLabel)}</strong>
-                        <p>${escapeHtml(currentMeta.description)}</p>
-                    </article>
-                    <article class="status-card neutral">
-                        <span>Result</span>
-                        <strong>${escapeHtml(currentMeta.resultLabel)}</strong>
-                        <p>The action updates the visible state after it runs.</p>
-                    </article>
-                    <article class="status-card neutral">
-                        <span>Why blockchain</span>
-                        <strong>Independent trust source</strong>
-                        <p>Registry reads confirm issuer authority, anchoring, and revocation.</p>
-                    </article>
-                </div>
-                <div class="story-band">
-                    ${DEMO_STORY_CARDS
-                        .map(
-                            (card) => `
-                                <article class="story-card">
-                                    <span>${escapeHtml(card.role)}</span>
-                                    <strong>${escapeHtml(card.title)}</strong>
-                                    <p>${escapeHtml(card.body)}</p>
-                                </article>
-                            `
-                        )
-                        .join("")}
-                </div>
-                <div class="action-card-grid">
-                    ${renderActionCard(
-                        "Issue credential",
-                        "Create the signed record.",
-                        "start-demo",
-                        {variant: "primary", badge: "University"}
-                    )}
-                    ${renderActionCard(
-                        "Share proof",
-                        "Reveal only the requested facts.",
-                        "reveal",
-                        {badge: "Wallet"}
-                    )}
-                    ${renderActionCard(
-                        "Verify proof",
-                        "Check the proof and request match.",
-                        "verify",
-                        {badge: "Verifier"}
-                    )}
-                    ${renderActionCard(
-                        "Check registry",
-                        "Read issuer authority and revocation.",
-                        isChainConfigured() ? "refresh-chain" : "set-up-chain",
-                        {badge: "Registry"}
-                    )}
-                </div>
+            <div class="portal-card-grid" aria-label="Choose a role portal">
+                ${renderPortalCard("issue", "Sign the academic record and hand it to the student.", "open-university", "Open University Portal")}
+                ${renderPortalCard("reveal", "Choose exactly which facts are disclosed.", "open-student", "Open Student Wallet")}
+                ${renderPortalCard("verify", "Accept or reject the proof without the full transcript.", "open-verifier", "Open Verifier Portal")}
+                ${renderPortalCard("blockchain", "Read issuer authority, anchor state, and revocation.", "open-registry", "Open Blockchain Registry")}
+                ${renderPortalCard("privacy", "Inspect hashes, signatures, Merkle paths, and bindings.", "open-technical", "Open Technical Evidence")}
             </div>
-            <div class="policy-callout good overview-callout">
-                <strong>Flow</strong>
-                <p>University signs, the student reveals, the verifier checks, and the registry confirms trust.</p>
+            <div class="trust-flow" aria-label="Data movement summary">
+                <article>
+                    <span>University</span>
+                    <strong>Credential</strong>
+                </article>
+                <article>
+                    <span>Student</span>
+                    <strong>Selective proof</strong>
+                </article>
+                <article>
+                    <span>Verifier</span>
+                    <strong>Decision</strong>
+                </article>
+                <article>
+                    <span>Registry</span>
+                    <strong>Status only</strong>
+                </article>
             </div>
         </section>
     `;
@@ -970,51 +951,44 @@ function renderIssueStep(): string {
     };
 
     return `
-        <section class="section demo-step">
-            <div class="section-head">
-                <div>
-                    <p>University Issuer</p>
-                    <h2>University creates and signs the credential.</h2>
-                    <p class="section-deck">Issue one signed record the student can hold.</p>
-                </div>
-                <span>Signed by university</span>
-            </div>
-            <div class="issue-layout">
-                <div class="ledger-panel">
-                    <div class="status-cards issue-status-cards">
-                        <article class="status-card good">
-                            <span>Issuer profile</span>
-                            <strong>Signed</strong>
-                            <p>${escapeHtml(DEMO_ORGANIZATION.name)} signs the record.</p>
-                        </article>
-                        <article class="status-card good">
-                            <span>Credential template</span>
-                            <strong>V2</strong>
-                            <p>V2 schema and issuer profile.</p>
-                        </article>
-                        <article class="status-card good">
-                            <span>Transcript scope</span>
-                            <strong>${credential.claimCount} facts</strong>
-                            <p>The full transcript is signed once.</p>
-                        </article>
-                        <article class="status-card neutral">
-                            <span>Private facts</span>
-                            <strong>${state.scenario.policy.hiddenCount} hidden</strong>
-                            <p>${formatHiddenSummary(state.scenario.policy.hiddenCount)} stay private.</p>
-                        </article>
+        <section class="portal-screen portal-university">
+            ${renderPortalHeader("issue", {
+                kicker: "University Portal",
+                title: "Issue a tamper-proof credential",
+                subtitle: "The university signs the full academic record once. The student decides later what to reveal.",
+                status: "Signed credential ready"
+            })}
+            <div class="portal-workbench">
+                <main class="role-panel">
+                    <div class="role-action-card">
+                        <span>Primary action</span>
+                        <h2>Sign academic record</h2>
+                        <p>Creates an ECC-signed credential and a Merkle root over ${credential.claimCount} transcript facts.</p>
+                        <div class="portal-actions">
+                            ${renderButton("issue", {variant: "primary"})}
+                            ${renderButton("open-student", {variant: "secondary"})}
+                        </div>
                     </div>
-                    <div class="policy-callout good">
-                        <strong>Signed by university</strong>
-                        <p>The credential is ready for the student wallet.</p>
+                    <div class="metric-grid">
+                        ${renderMetricTile("Issuer", DEMO_ORGANIZATION.name, "Authorized university identity.", "good")}
+                        ${renderMetricTile("Facts signed", credential.claimCount, "Full record is bound into one credential.", "good")}
+                        ${renderMetricTile("Hidden by default", state.scenario.policy.hiddenCount, "Transcript facts stay with the student.", "neutral")}
+                        ${renderMetricTile("Merkle root", "Created", "Selective disclosure can be proven later.", "good")}
                     </div>
-                    <div class="hero-actions">
-                        ${renderButton("issue", {variant: "primary"})}
+                </main>
+                <aside class="context-panel">
+                    <div class="context-card">
+                        <span>Issuer profile</span>
+                        <strong>${escapeHtml(DEMO_ORGANIZATION.name)}</strong>
+                        <dl class="compact-list">
+                            <div><dt>Credential id</dt><dd>${escapeHtml(short(credential.id, 16, 10))}</dd></div>
+                            <div><dt>Holder</dt><dd>${escapeHtml(short(credential.holder, 16, 10))}</dd></div>
+                            <div><dt>Issued</dt><dd>${escapeHtml(formatTimestamp(credential.issuedAt))}</dd></div>
+                        </dl>
                     </div>
-                    <div class="toggle-row">
-                        ${renderToggle("showCredentialDetails", "Show advanced issuer details")}
-                    </div>
+                    ${renderToggle("showCredentialDetails", "Advanced issuer evidence")}
                     ${state.toggles.showCredentialDetails ? `
-                        <div class="meta-grid issue-technical-grid">
+                        <div class="evidence-grid compact-evidence">
                             <article>
                                 <span>Credential digest</span>
                                 <code>${escapeHtml(short(state.scenario.credentialDigest, 18, 12))}</code>
@@ -1028,26 +1002,12 @@ function renderIssueStep(): string {
                                 <code>${escapeHtml(formatSignature(credential.signature))}</code>
                             </article>
                             <article>
-                                <span>Holder address</span>
-                                <code>${escapeHtml(short(credential.holder, 18, 12))}</code>
-                            </article>
-                            <article>
-                                <span>Raw credential metadata</span>
+                                <span>Metadata</span>
                                 <code>${escapeHtml(JSON.stringify(rawMetadata))}</code>
                             </article>
                         </div>
                     ` : ""}
-                </div>
-                <div class="story-panel">
-                    <h3>Issuer profile</h3>
-                    <p>The issuer signs once. The student receives the credential in a wallet.</p>
-                    <dl class="story-list">
-                        <div><dt>Issuer</dt><dd>${escapeHtml(DEMO_ORGANIZATION.name)}</dd></div>
-                        <div><dt>Holder</dt><dd>${escapeHtml(short(credential.holder, 18, 12))}</dd></div>
-                        <div><dt>Total facts</dt><dd>${credential.claimCount}</dd></div>
-                        <div><dt>Hidden facts</dt><dd>${state.scenario.policy.hiddenCount}</dd></div>
-                    </dl>
-                </div>
+                </aside>
             </div>
         </section>
     `;
@@ -1055,50 +1015,52 @@ function renderIssueStep(): string {
 
 function renderRevealStep(): string {
     return `
-        <section class="section demo-step">
-            <div class="section-head">
-                <div>
-                    <p>Student Wallet</p>
-                    <h2>The student chooses what to reveal.</h2>
-                    <p class="section-deck">Share only the facts the verifier asked for.</p>
-                </div>
-                <span>Wallet privacy summary</span>
-            </div>
-            <div class="wallet-layout">
-                <div class="ledger-panel wallet-panel">
-                    <div class="wallet-card">
-                        <span>Student-owned credential</span>
-                        <strong>${escapeHtml(DEMO_ORGANIZATION.name)}</strong>
-                        <p>The wallet keeps the credential ready for selective disclosure.</p>
-                        <dl class="wallet-summary">
-                            <div><dt>Revealed facts</dt><dd>${state.scenario.policy.disclosedCount}</dd></div>
-                            <div><dt>Hidden facts</dt><dd>${state.scenario.policy.hiddenCount}</dd></div>
-                            <div><dt>Status</dt><dd>Ready to share</dd></div>
-                        </dl>
+        <section class="portal-screen portal-student">
+            ${renderPortalHeader("reveal", {
+                kicker: "Student Wallet",
+                title: "Choose what leaves your wallet",
+                subtitle: "The verifier asked for three facts. Everything else remains hidden.",
+                status: `${state.scenario.policy.disclosedCount} revealed / ${state.scenario.policy.hiddenCount} hidden`
+            })}
+            <div class="portal-workbench">
+                <main class="role-panel">
+                    <div class="role-action-card">
+                        <span>Primary action</span>
+                        <h2>Create selective-disclosure proof</h2>
+                        <p>Share only the required facts and attach Merkle proofs for those facts.</p>
+                        <div class="portal-actions">
+                            ${renderButton("reveal", {variant: "primary"})}
+                            ${renderButton("open-verifier", {variant: "secondary"})}
+                        </div>
                     </div>
-                    <div class="policy-callout good">
-                        <strong>Share proof</strong>
-                        <p>Reveal degree field, GPA, and thesis only.</p>
+                    <div class="metric-grid">
+                        ${renderMetricTile("Requested facts", requiredClaimLabels().length, "Degree field, GPA, and thesis.", "good")}
+                        ${renderMetricTile("Revealed", state.scenario.policy.disclosedCount, formatRevealedSummary(state.scenario.policy.selectedClaimKeys), "good")}
+                        ${renderMetricTile("Hidden", state.scenario.policy.hiddenCount, formatHiddenSummary(state.scenario.policy.hiddenCount), "neutral")}
+                        ${renderMetricTile("Policy match", state.scenario.policy.exactMatch ? "Exact" : "Fix selection", "Verifier accepts only an exact match.", state.scenario.policy.exactMatch ? "good" : "warn")}
                     </div>
-                    <div class="hero-actions">
-                        ${renderButton("reveal", {variant: "primary"})}
+                </main>
+                <aside class="context-panel">
+                    <div class="context-card wallet-vault">
+                        <span>Wallet privacy</span>
+                        <strong>Full transcript stays local</strong>
+                        <p>The verifier receives selected claims, salts, and Merkle paths only for the facts you reveal.</p>
                     </div>
-                    <div class="toggle-row">
-                        ${renderToggle("showRawClaims", "Show raw wallet data")}
-                    </div>
-                    <p class="support-text">The wallet keeps the rest hidden.</p>
-                </div>
-                <div class="claim-column">
-                    <div class="policy-panel">
+                    <div class="policy-panel compact-policy">
                         <div class="policy-tags">
                             ${requiredClaimLabels()
                                 .map((label) => `<span>${escapeHtml(label)}</span>`)
                                 .join("")}
                         </div>
                         ${renderPolicyWarnings()}
-                        ${renderClaims()}
+                        <div class="toggle-row">
+                            ${renderToggle("showRawClaims", "Show raw wallet data")}
+                        </div>
+                        <div class="claim-column portal-claim-list">
+                            ${renderClaims()}
+                        </div>
                     </div>
-                </div>
+                </aside>
             </div>
         </section>
     `;
@@ -1106,27 +1068,38 @@ function renderRevealStep(): string {
 
 function renderVerifyStep(): string {
     return `
-        <section class="section demo-step">
-            <div class="section-head">
-                <div>
-                    <p>Verifier Portal</p>
-                    <h2>${state.verification?.valid ? "Proof accepted" : "Proof waiting for review"}</h2>
-                    <p class="section-deck">Check the proof without exposing the transcript.</p>
-                </div>
-                <span>${state.verification?.valid ? "Accepted" : state.verificationRan ? "Rejected" : "Awaiting proof"}</span>
-            </div>
-            <div class="verification-panel">
-                <div class="policy-callout good verify-summary-callout">
-                    <strong>Verification request</strong>
-                    <p>degree field, GPA, thesis</p>
-                </div>
-                <div class="hero-actions">
-                    ${renderButton("verify", {variant: "primary"})}
-                </div>
-                <div class="toggle-row">
-                    ${renderToggle("showAdvancedVerification", "Evidence details")}
-                </div>
-                ${renderVerificationSummary()}
+        <section class="portal-screen portal-verifier">
+            ${renderPortalHeader("verify", {
+                kicker: "Verifier Portal",
+                title: "Verify without opening the transcript",
+                subtitle: "Check the submitted proof against the request and decide accept or reject.",
+                status: state.verification?.valid ? "Accepted" : state.verificationRan ? "Rejected" : "Awaiting proof"
+            })}
+            <div class="portal-workbench">
+                <main class="role-panel">
+                    <div class="role-action-card">
+                        <span>Primary action</span>
+                        <h2>Run verification checks</h2>
+                        <p>Signatures, policy match, timestamps, and Merkle proofs are checked locally.</p>
+                        <div class="portal-actions">
+                            ${renderButton("verify", {variant: "primary"})}
+                            ${renderButton("open-registry", {variant: "secondary"})}
+                        </div>
+                    </div>
+                    ${renderVerificationSummary()}
+                </main>
+                <aside class="context-panel">
+                    <div class="context-card">
+                        <span>Verification request</span>
+                        <strong>Degree field, GPA, thesis</strong>
+                        <p>No course list, lab affiliation, or extra transcript details are requested.</p>
+                    </div>
+                    <div class="metric-grid single-column">
+                        ${renderMetricTile("Revealed facts", state.scenario.policy.disclosedCount, "Facts visible to verifier.", "good")}
+                        ${renderMetricTile("Hidden facts", state.scenario.policy.hiddenCount, "Facts absent from the proof.", "neutral")}
+                        ${renderMetricTile("Checks", state.verification?.checks.length ?? 17, "Grouped for a non-technical decision.", "good")}
+                    </div>
+                </aside>
             </div>
         </section>
     `;
@@ -1134,15 +1107,13 @@ function renderVerifyStep(): string {
 
 function renderBlockchainStep(): string {
     return `
-        <section class="section demo-step">
-            <div class="section-head">
-                <div>
-                    <p>Blockchain Registry</p>
-                    <h2>Registry confirms trust and revocation.</h2>
-                    <p class="section-deck">Refresh live chain status when you want a new read.</p>
-                </div>
-                <span>Live registry</span>
-            </div>
+        <section class="portal-screen portal-registry">
+            ${renderPortalHeader("blockchain", {
+                kicker: "Blockchain Registry",
+                title: "Check the public trust state",
+                subtitle: "The registry confirms issuer authority, anchor presence, revocation, and issuer activity.",
+                status: isChainConfigured() ? "Live registry ready" : "Sample mode"
+            })}
             ${renderChainPanel()}
         </section>
     `;
@@ -1154,15 +1125,13 @@ function renderPrivacyStep(): string {
         ?? state.scenario.presentation?.disclosed[0];
 
     return `
-        <section class="section demo-step">
-            <div class="section-head">
-                <div>
-                    <p>Evidence / Advanced</p>
-                    <h2>Technical evidence and proof material.</h2>
-                    <p class="section-deck">Hashes, proofs, signatures, and checks stay collapsed by default.</p>
-                </div>
-                <span>Technical evidence</span>
-            </div>
+        <section class="portal-screen portal-technical">
+            ${renderPortalHeader("privacy", {
+                kicker: "Technical Evidence",
+                title: "Inspect the proof trail",
+                subtitle: "Hashes, signatures, Merkle paths, and registry comparisons live here, away from the default product flow.",
+                status: "Advanced by design"
+            })}
             <div class="privacy-grid">
                 <article class="boundary-card">
                     <span>What was revealed</span>
@@ -1185,7 +1154,7 @@ function renderPrivacyStep(): string {
                     <p>The private transcript never appears unless the holder reveals it.</p>
                 </article>
             </div>
-            <div class="hero-actions privacy-actions">
+            <div class="portal-actions privacy-actions">
                 ${renderButton("restart-demo", {variant: "secondary"})}
             </div>
             <div class="toggle-row">
@@ -1249,8 +1218,8 @@ function renderPrivacyStep(): string {
     `;
 }
 
-function renderActiveStepContent(): string {
-    switch (state.activeStep) {
+function renderActivePortalContent(): string {
+    switch (state.activePortal) {
         case "overview":
             return renderOverviewStep();
         case "issue":
@@ -1266,9 +1235,9 @@ function renderActiveStepContent(): string {
     }
 }
 
-async function executeActionPlan(plan: ReturnType<typeof planAction>, action: string): Promise<void> {
-    if (plan.nextStep) {
-        setActiveStep(plan.nextStep);
+async function executeActionPlan(plan: ReturnType<typeof planAction>): Promise<void> {
+    if (plan.nextPortal) {
+        setActivePortal(plan.nextPortal);
     }
 
     if (plan.refreshScenario) {
@@ -1299,12 +1268,12 @@ function render(): void {
 
     app.innerHTML = `
         <div class="page-shell">
-            ${renderStepShell()}
+            ${renderPortalShell()}
 
             ${state.notice ? `<div class="notice ${state.notice.kind}">${escapeHtml(state.notice.text)}</div>` : ""}
             ${state.busyLabel ? `<div class="status-line"><span></span>${escapeHtml(state.busyLabel)}</div>` : ""}
 
-            ${renderActiveStepContent()}
+            ${renderActivePortalContent()}
         </div>
     `;
 
@@ -1312,11 +1281,11 @@ function render(): void {
 }
 
 function bindEvents(root: HTMLElement): void {
-    root.querySelectorAll<HTMLButtonElement>("[data-step-id]").forEach((button) => {
+    root.querySelectorAll<HTMLButtonElement>("[data-portal-id]").forEach((button) => {
         button.addEventListener("click", () => {
-            const stepId = button.dataset.stepId as DemoStepId | undefined;
-            if (!stepId) return;
-            setActiveStep(stepId);
+            const portalId = button.dataset.portalId as PortalId | undefined;
+            if (!portalId) return;
+            setActivePortal(portalId);
             render();
         });
     });
@@ -1381,13 +1350,12 @@ async function handleAction(action: string): Promise<void> {
 
             setBusy(action, "Verifying signatures, policy match, and cryptographic proofs...");
             await runVerification();
-            setActiveStep("blockchain");
             setNotice(state.verification?.valid ? "ok" : "bad", state.verification?.valid ? "Verification passed." : "Verification failed.");
             return;
         }
 
         const plan = planAction(action, isChainConfigured());
-        if (plan.nextStep === "overview" && action === "restart-demo") {
+        if (plan.nextPortal === "overview" && action === "restart-demo") {
             resetDemo();
             setNotice("ok", "Opened the dashboard.");
             render();
@@ -1410,7 +1378,7 @@ async function handleAction(action: string): Promise<void> {
 
             if (plan.chainAction === "refresh-chain") {
                 await refreshChainSnapshot();
-                setActiveStep("blockchain");
+                setActivePortal("blockchain");
                 setNotice("ok", "Blockchain status refreshed.");
                 return;
             }
@@ -1426,7 +1394,7 @@ async function handleAction(action: string): Promise<void> {
                     initialValidFrom: Math.max(1, state.scenario.credential.issuedAt - 3600)
                 });
                 await refreshChainSnapshot(txHash);
-                setActiveStep("blockchain");
+                setActivePortal("blockchain");
                 setNotice("ok", `Organization registered in ${short(txHash, 18, 12)}.`);
                 return;
             }
@@ -1444,7 +1412,7 @@ async function handleAction(action: string): Promise<void> {
                     claimCount: state.scenario.credential.claimCount
                 });
                 await refreshChainSnapshot(txHash);
-                setActiveStep("blockchain");
+                setActivePortal("blockchain");
                 setNotice("ok", `Credential anchored in ${short(txHash, 18, 12)}.`);
                 return;
             }
@@ -1458,7 +1426,7 @@ async function handleAction(action: string): Promise<void> {
                     id("capstone-v2-demo-revocation") as Hex
                 );
                 await refreshChainSnapshot(txHash);
-                setActiveStep("blockchain");
+                setActivePortal("blockchain");
                 setNotice("warn", `Credential revoked in ${short(txHash, 18, 12)}.`);
                 return;
             }
@@ -1469,7 +1437,7 @@ async function handleAction(action: string): Promise<void> {
                     state.scenario.credential.issuerOrganizationId as Hex
                 );
                 await refreshChainSnapshot(txHash);
-                setActiveStep("blockchain");
+                setActivePortal("blockchain");
                 setNotice("warn", `Issuer organization suspended in ${short(txHash, 18, 12)}.`);
                 return;
             }
@@ -1480,8 +1448,15 @@ async function handleAction(action: string): Promise<void> {
             return;
         }
 
-        if (plan.nextStep || plan.openAdvancedChain || plan.refreshScenario || plan.resetClaimsToRequired || plan.rerunVerification) {
-            await executeActionPlan(plan, action);
+        if (
+            plan.nextPortal
+            || plan.openAdvancedChain
+            || plan.refreshScenario
+            || plan.resetClaimsToRequired
+            || plan.rerunVerification
+            || plan.noticeKind
+        ) {
+            await executeActionPlan(plan);
         }
     } catch (error) {
         setNotice("bad", (error as Error).message);
