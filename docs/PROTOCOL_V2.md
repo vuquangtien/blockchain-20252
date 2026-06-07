@@ -7,7 +7,7 @@ Protocol V2 enhances the decentralized academic credential system by addressing 
 - **Holder-Binding**: Ensures credentials cannot be leaked or repackaged by third parties without the holder's EIP-712 consent.
 - **Request Policies**: Normalizes verifier policies (required claims, accepted issuers, accepted schemas) and hashes them inside the signed request.
 - **Replay Protection**: Binds presentations to a specific verifier-signed request digest and enforces single-use nonce consumption.
-- **Typed-Signature standard**: Migrates raw JSON string signatures to the EIP-712 typed data standard.
+- **Typed-Signature standard**: Migrates ad hoc string signatures to the EIP-712 typed data standard.
 
 ---
 

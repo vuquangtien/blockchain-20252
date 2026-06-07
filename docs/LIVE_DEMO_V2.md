@@ -32,7 +32,7 @@ anvil --host 0.0.0.0 --port 8545
 # terminal 2
 cd app
 npm run deploy:v2-local
-npm run web -- --port 5176
+npm run web
 ```
 
 ## Generated config

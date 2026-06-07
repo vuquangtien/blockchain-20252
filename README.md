@@ -95,8 +95,10 @@ The system has three actors:
 │   ├── SECURITY.md                 Threat model & known limitations
 │   ├── GRADING.md                  Rubric-to-evidence map
 │   ├── PRESENTATION.md             5-minute demo script + defense Q&A
+│   ├── PRESENTATION_RUNBOOK.md     Detailed 7-10 minute presentation script and fallback plan
+│   ├── DEFENSE_QA.md               Teacher Q&A defense document
 │   ├── SUBMISSION_CHECKLIST.md     Final commands before submission
-│   ├── evaluation/                 Per-rubric full-score guides
+│   ├── evaluation/                 Per-rubric full-score guides & FINAL_GRADING_TRACE.md
 │   └── REPORT.md                   Capstone-style technical report
 │
 ├── Makefile                    One-command check/demo/package helpers
@@ -128,7 +130,7 @@ npm run demo
 
 # 6. Launch the browser dashboard:
 npm run web
-# open http://localhost:5173
+# open the printed local URL
 ```
 
 ## CredentialTrust Live Demo V2
@@ -150,7 +152,7 @@ Manual fallback:
 cd app
 anvil --host 0.0.0.0 --port 8545
 npm run deploy:v2-local
-npm run web -- --port 5176
+npm run web
 ```
 
 The generated `app/data/chain-v2.json` is served by Vite at `/chain-v2.json` and is excluded
@@ -171,8 +173,8 @@ The end-to-end demo walks through every requirement in the brief in 9 sections. 
 
 ## Test coverage
 
-- **23 / 23 Foundry contract tests pass** — including fuzz tests on the anchor + revoke roundtrip and Solidity-side Merkle proof verification.
-- **131 / 131 vitest unit tests pass** — covering Merkle proof correctness/tampering, ECC sign/recover/interop with ethers, end-to-end issuance + selective disclosure + tamper detection + on-chain status checks + holder-bound proof validation.
+- **70 / 70 Foundry contract tests pass** — including fuzz tests on the V2 issuer/registry lifecycle and Solidity-side Merkle proof verification.
+- **135 / 135 vitest unit tests pass** — covering Merkle proof correctness/tampering, ECC sign/recover/interop with ethers, end-to-end issuance + selective disclosure + tamper detection, on-chain status checks, and holder-bound proof validation.
 - **Browser production build passes** — the same TypeScript cryptography core bundles into the Vite DApp.
 
 ```
@@ -190,12 +192,12 @@ $ cd ../contracts && forge snapshot
 contracts/.gas-snapshot updated
 ```
 
-For the grading narrative, read [docs/GRADING.md](docs/GRADING.md). For detailed full-score strategy per rubric category, read [docs/evaluation/00_INDEX.md](docs/evaluation/00_INDEX.md). For the final pre-submission checklist, read [docs/SUBMISSION_CHECKLIST.md](docs/SUBMISSION_CHECKLIST.md).
+For the grading narrative, read [docs/GRADING.md](docs/GRADING.md) and the final [FINAL_GRADING_TRACE.md](docs/evaluation/FINAL_GRADING_TRACE.md). For the presentation runbook, see [PRESENTATION_RUNBOOK.md](docs/PRESENTATION_RUNBOOK.md) and the [DEFENSE_QA.md](docs/DEFENSE_QA.md) sheet. For detailed full-score strategy per rubric category, read [docs/evaluation/00_INDEX.md](docs/evaluation/00_INDEX.md). For the final pre-submission checklist, read [docs/SUBMISSION_CHECKLIST.md](docs/SUBMISSION_CHECKLIST.md).
 
 ## Key design decisions (read [docs/DESIGN.md](docs/DESIGN.md) for the full reasoning)
 
 1. **secp256k1 for ECC** — same curve Ethereum uses. The issuer's wallet *is* their signing key; no separate PKI to manage.
-2. **EIP-191 `personal_sign` wrapping** — signatures verify in MetaMask, Solidity (`ecrecover`), and any Ethereum wallet without modification.
+2. **EIP-191 `personal_sign` wrapping** — signatures verify in Solidity (`ecrecover`) and compatible Ethereum wallet clients without modification.
 3. **Domain-separated Merkle hashing** — leaves prefixed `0x00`, internal nodes prefixed `0x01`, defending against second-preimage attacks.
 4. **Direction-bit Merkle proofs (no sort-pair)** — preserves leaf order and prevents proof aliasing.
 5. **Per-claim 32-byte salts** — hidden leaves cannot be brute-forced from the root (defends against dictionary attacks on a small claim space like grades A/B/C).

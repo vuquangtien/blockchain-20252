@@ -311,7 +311,7 @@ The browser UI uses the same TypeScript core as the CLI: credential issuance, sa
 ```bash
 cd app
 npm run web
-# open http://localhost:5173
+# open the printed local URL
 ```
 
 The Vite config uses polling-based file watching so the dev server is less likely to hit Linux `ENOSPC` watcher limits on machines with many IDE extensions. If it still happens, use the production preview fallback:
@@ -319,7 +319,7 @@ The Vite config uses polling-based file watching so the dev server is less likel
 ```bash
 npm run web:build
 npm run web:preview -- --port 4173
-# open http://localhost:4173
+# open the printed preview URL
 ```
 
 For offline proof verification, the dashboard works immediately in the browser. For local-chain actions:

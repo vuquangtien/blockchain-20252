@@ -34,7 +34,7 @@ Live dashboard:
 
 ```bash
 make web
-# open http://localhost:5173
+# open the printed local URL
 ```
 
 Fallback if the dev server has watcher issues:
