@@ -752,6 +752,7 @@ function renderChainPanel(): string {
     const snapshot = state.chainSnapshot;
     const helpPanel = renderChainHelpPanel();
     const primaryAction = chainReady ? "refresh-chain" : "set-up-chain";
+    const shouldOfferAnchor = chainReady && snapshot?.anchorExists !== true;
 
     return `
         <div class="chain-flow">
@@ -766,6 +767,7 @@ function renderChainPanel(): string {
             </div>
             <div class="chain-primary-actions">
                 ${renderButton(primaryAction, {variant: "primary", label: chainReady ? "Check registry now" : "Connect local registry"})}
+                ${shouldOfferAnchor ? renderButton("anchor", {variant: "secondary", label: "Anchor credential on-chain"}) : ""}
                 ${renderButton("open-technical", {variant: "secondary"})}
             </div>
             ${helpPanel}
