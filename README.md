@@ -1,6 +1,6 @@
-# Teacher Setup and Grading Guide
+# Setup
 
-This guide helps the grader set up the repository, verify the implementation, and understand where the main pieces live.
+This guide helps the user set up the repository, verify the implementation, and understand where the main pieces live.
 
 CredentialTrust is a decentralized academic credential system. The private transcript stays off-chain for privacy. The chain stores issuer authorization, credential anchors, and revocation state. The browser app and the TypeScript core let the student reveal only selected facts while the verifier checks the proof and the live registry status.
 
@@ -34,15 +34,6 @@ Expected validation results:
 - 137 Vitest tests pass
 - browser production build passes
 - `npm audit` reports 0 vulnerabilities
-
-## Setup From The Submitted Zip
-
-```bash
-unzip 20235625-VuQuangTien-blockchain-credential.zip
-cd 20235625-VuQuangTien-blockchain-credential
-make setup
-make check
-```
 
 ## Where The Core Code Lives
 
